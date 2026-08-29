@@ -5,6 +5,23 @@ import { makeMove } from './game/engine';
 import { chooseAIMove } from './game/ai/AIController';
 import { buildTimeline, computeFrameDelayMs } from './animation/timeline';
 import type { TimelineFrame } from './animation/timeline';
+import {
+  isFeedbackEnabled,
+  playCaptureSound,
+  playDrawSound,
+  playLoseSound,
+  playSeedTick,
+  playSelectSound,
+  playTurnChangeSound,
+  playWinSound,
+  toggleFeedbackEnabled,
+} from './audio/soundManager';
+import {
+  hapticCapture,
+  hapticLose,
+  hapticSelect,
+  hapticWin,
+} from './audio/haptics';
 import Board from './components/Board';
 import GameOverOverlay from './components/GameOverOverlay';
 import './App.css';
@@ -39,6 +56,7 @@ function App() {
   const [animationFrame, setAnimationFrame] = useState<TimelineFrame | null>(
     null
   );
+  const [audioEnabled, setAudioEnabled] = useState(() => isFeedbackEnabled());
 
   // Pending setTimeout ids, so we can cancel them if the component
   // unmounts mid-animation.
@@ -55,13 +73,32 @@ function App() {
   // Executes pitId as a move from fromState via the game engine's own
   // makeMove(), then plays the resulting steps back visually. Used for
   // both the player's clicks and the AI's chosen moves — there is only
-  // one place a move is ever applied.
+  // one place a move is ever applied. Sound/haptic feedback is layered
+  // on here too, purely reacting to what the engine already decided —
+  // none of it feeds back into gameplay.
   const applyMove = useCallback((pitId: number, fromState: GameState) => {
     const result = makeMove(fromState, pitId);
     const frames = buildTimeline(fromState.pits, result);
 
+    const playEndOfMoveFeedback = () => {
+      if (result.gameOver) {
+        if (result.status === 'player-won') {
+          playWinSound();
+          hapticWin();
+        } else if (result.status === 'ai-won') {
+          playLoseSound();
+          hapticLose();
+        } else if (result.status === 'draw') {
+          playDrawSound();
+        }
+      } else {
+        playTurnChangeSound();
+      }
+    };
+
     if (frames.length === 0) {
       setGameState(result.gameState);
+      playEndOfMoveFeedback();
       return;
     }
 
@@ -72,6 +109,15 @@ function App() {
     frames.forEach((frame, index) => {
       const timeoutId = window.setTimeout(() => {
         setAnimationFrame(frame);
+        // Per-seed feedback: a soft tick for an ordinary landing, a
+        // richer chime for a capture. playSeedTick() throttles itself so
+        // a long relay chain doesn't turn into a machine-gun clatter.
+        if (frame.capturedPitIds.length > 0) {
+          playCaptureSound();
+          hapticCapture();
+        } else if (frame.landingPitId !== null) {
+          playSeedTick();
+        }
       }, delayMs * index);
       timeoutIdsRef.current.push(timeoutId);
     });
@@ -81,6 +127,7 @@ function App() {
       setGameState(result.gameState);
       setAnimationFrame(null);
       setIsAnimating(false);
+      playEndOfMoveFeedback();
     }, finishDelayMs);
     timeoutIdsRef.current.push(finishTimeoutId);
   }, []);
@@ -96,6 +143,8 @@ function App() {
     if (gameState.currentTurn !== 'player') return;
     if (!validMoveIds.has(pitId)) return; // defense-in-depth; UI already disables these
 
+    playSelectSound();
+    hapticSelect();
     applyMove(pitId, gameState);
   };
 
@@ -129,10 +178,28 @@ function App() {
     setGameState(createInitialGameState());
   }, []);
 
+  const handleToggleAudio = () => {
+    const nowEnabled = toggleFeedbackEnabled();
+    setAudioEnabled(nowEnabled);
+    // A quick confirmation chime when turning sound back on — none when
+    // muting, since that would defeat the point.
+    if (nowEnabled) playSelectSound();
+  };
+
   const displayPits = animationFrame?.pits ?? gameState.pits;
 
   return (
     <div className="app">
+      <button
+        type="button"
+        className="sound-toggle"
+        onClick={handleToggleAudio}
+        aria-label={audioEnabled ? 'Mute sound' : 'Unmute sound'}
+        aria-pressed={audioEnabled}
+      >
+        {audioEnabled ? '🔊' : '🔈'}
+      </button>
+
       <h1 className="app-title">Pallanguzhi</h1>
 
       <div className="scoreboard">

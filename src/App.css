@@ -12,6 +12,36 @@
   overflow: hidden;
 }
 
+.sound-toggle {
+  position: absolute;
+  top: clamp(0.5rem, 2.5vh, 1rem);
+  right: clamp(0.5rem, 3vw, 1.25rem);
+  width: 2.25rem;
+  height: 2.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  line-height: 1;
+  border: 1px solid rgba(201, 150, 44, 0.4);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 1px 3px rgba(63, 36, 21, 0.15);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 100ms ease-out;
+  z-index: 5;
+}
+
+.sound-toggle:hover {
+  filter: brightness(1.05);
+}
+
+.sound-toggle:active {
+  transform: scale(0.92);
+}
+
 .game-over-overlay {
   position: fixed;
   inset: 0;
@@ -447,7 +477,8 @@
   .pit,
   .pit[data-selectable='true'],
   .game-over-overlay,
-  .game-over-card {
+  .game-over-card,
+  .sound-toggle {
     animation: none !important;
     transition: none !important;
   }

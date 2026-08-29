@@ -2,21 +2,31 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, fireEvent } from '@testing-library/react';
 import App from './App';
 import { STARTING_SEEDS_PER_PIT } from './game/gameState';
+import { isFeedbackEnabled, setFeedbackEnabled } from './audio/soundManager';
 
 const TOTAL_SEEDS = STARTING_SEEDS_PER_PIT * 14;
 
+function pitButtons(): HTMLButtonElement[] {
+  return [...Array(14).keys()].map(
+    (id) => screen.getByTestId(`pit-${id}`) as HTMLButtonElement
+  );
+}
+
 function totalSeedsOnBoard(): number {
-  return [...Array(14).keys()]
-    .map((id) => screen.getByTestId(`pit-${id}`))
-    .reduce((sum, button) => sum + Number(button.textContent), 0);
+  return pitButtons().reduce(
+    (sum, button) => sum + Number(button.textContent),
+    0
+  );
 }
 
 beforeEach(() => {
   vi.useFakeTimers();
+  setFeedbackEnabled(true);
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  setFeedbackEnabled(true);
 });
 
 describe('App', () => {
@@ -24,7 +34,7 @@ describe('App', () => {
     render(<App />);
 
     expect(screen.getByText('Your turn')).toBeTruthy();
-    expect(screen.getAllByRole('button')).toHaveLength(14);
+    expect(pitButtons()).toHaveLength(14);
     expect(totalSeedsOnBoard()).toBe(TOTAL_SEEDS);
   });
 
@@ -60,7 +70,7 @@ describe('App', () => {
 
     // Animation is running (timers haven't been flushed yet) — nothing
     // should be clickable, and the committed game state hasn't changed.
-    for (const button of screen.getAllByRole('button') as HTMLButtonElement[]) {
+    for (const button of pitButtons()) {
       expect(button.disabled).toBe(true);
     }
     expect(screen.getByText('Your turn')).toBeTruthy();
@@ -98,12 +108,12 @@ describe('App', () => {
     expect(screen.getByText("AI's turn")).toBeTruthy();
 
     // No pit should be clickable now, since it isn't the player's turn.
-    for (const button of screen.getAllByRole('button') as HTMLButtonElement[]) {
+    for (const button of pitButtons()) {
       expect(button.disabled).toBe(true);
     }
 
     // Animation highlight classes are gone once a move has fully committed.
-    for (const button of screen.getAllByRole('button')) {
+    for (const button of pitButtons()) {
       expect(button.className).not.toContain('pit--active');
       expect(button.className).not.toContain('pit--landing');
     }
@@ -148,6 +158,28 @@ describe('App', () => {
   it('does not show the game-over overlay while the game is in progress', () => {
     render(<App />);
     expect(screen.queryByTestId('game-over-overlay')).toBeNull();
+  });
+
+  it('the sound toggle reflects and updates the shared audio preference', () => {
+    render(<App />);
+
+    const toggle = screen.getByRole('button', { name: /mute sound/i });
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(isFeedbackEnabled()).toBe(true);
+
+    fireEvent.click(toggle);
+
+    expect(isFeedbackEnabled()).toBe(false);
+    expect(
+      screen.getByRole('button', { name: /unmute sound/i }).getAttribute(
+        'aria-pressed'
+      )
+    ).toBe('false');
+
+    fireEvent.click(screen.getByRole('button', { name: /unmute sound/i }));
+
+    expect(isFeedbackEnabled()).toBe(true);
+    expect(screen.getByRole('button', { name: /mute sound/i })).toBeTruthy();
   });
 
   it('plays a full game to completion, shows the result overlay with correct scores, and Play Again fully resets the game', () => {
