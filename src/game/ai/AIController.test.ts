@@ -75,7 +75,9 @@ describe('full game simulation (player + ai both via chooseAIMove)', () => {
   it('always reaches a valid end state within a bounded number of moves', () => {
     // chooseAIMove is side-agnostic — it just plays whoever's turn it is
     // legally, so it doubles as a "random player" for this simulation.
-    const MAX_MOVES = 500;
+    // Generous cap: fully-random play (unseeded Math.random) can
+    // occasionally run long before either side empties out.
+    const MAX_MOVES = 5000;
     let state = createInitialGameState();
     let moves = 0;
 
@@ -101,7 +103,7 @@ describe('full game simulation (player + ai both via chooseAIMove)', () => {
       let state = createInitialGameState();
       let moves = 0;
 
-      while (state.status === 'in-progress' && moves < 500) {
+      while (state.status === 'in-progress' && moves < 5000) {
         const pitId = chooseAIMove(state);
         const result = makeMove(state, pitId);
         state = result.gameState;
