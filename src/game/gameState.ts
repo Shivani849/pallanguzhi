@@ -1,8 +1,10 @@
 // Pure data model for the Pallanguzhi board.
-// No rendering, no rules, no AI — just the shape of the game state
-// and a way to construct its initial value.
+// No rendering, no seed-distribution rules, no AI — just the shape of the
+// game state, functions to construct it, and read-only queries over it.
 
 export type Owner = 'player' | 'ai';
+
+export type GameStatus = 'in-progress' | 'player-won' | 'ai-won' | 'draw';
 
 export interface Pit {
   id: number;       // 0-13, stable identity for the pit
@@ -12,7 +14,11 @@ export interface Pit {
 }
 
 export interface GameState {
-  pits: Pit[];       // always 14 pits: 7 player + 7 ai
+  pits: Pit[];               // always 14 pits: 7 ai + 7 player
+  currentTurn: Owner;        // whose turn it is to move
+  playerCollectedSeeds: number;
+  aiCollectedSeeds: number;
+  status: GameStatus;
 }
 
 // Traditional Pallanguzhi starting seed count per pit.
@@ -38,5 +44,36 @@ export function createInitialGameState(
     });
   }
 
-  return { pits };
+  return {
+    pits,
+    currentTurn: 'player',
+    playerCollectedSeeds: 0,
+    aiCollectedSeeds: 0,
+    status: 'in-progress',
+  };
+}
+
+export function getPlayerPits(state: GameState): Pit[] {
+  return state.pits
+    .filter((pit) => pit.owner === 'player')
+    .sort((a, b) => a.index - b.index);
+}
+
+export function getAIPits(state: GameState): Pit[] {
+  return state.pits
+    .filter((pit) => pit.owner === 'ai')
+    .sort((a, b) => a.index - b.index);
+}
+
+// A valid move is one of the current player's own pits that still has seeds.
+// Seed-distribution/capture rules are not implemented yet (Phase 3+).
+export function getValidMoves(state: GameState): Pit[] {
+  if (state.status !== 'in-progress') {
+    return [];
+  }
+
+  const ownPits =
+    state.currentTurn === 'player' ? getPlayerPits(state) : getAIPits(state);
+
+  return ownPits.filter((pit) => pit.seeds > 0);
 }
