@@ -3,6 +3,8 @@ import { act, render, screen, fireEvent } from '@testing-library/react';
 import App from './App';
 import { STARTING_SEEDS_PER_PIT } from './game/gameState';
 import { isFeedbackEnabled, setFeedbackEnabled } from './audio/soundManager';
+import { loadSavedGame } from './persistence/gameSave';
+import { loadHistory } from './persistence/gameHistory';
 
 const TOTAL_SEEDS = STARTING_SEEDS_PER_PIT * 14;
 
@@ -49,9 +51,14 @@ function renderTwoPlayers() {
 beforeEach(() => {
   vi.useFakeTimers();
   setFeedbackEnabled(true);
+  // Every test starts with no saved game / no history, unless it sets
+  // one up itself — otherwise a leftover save from one test would show
+  // the resume-prompt screen in the next.
+  window.localStorage.clear();
 });
 
 afterEach(() => {
+  window.localStorage.clear();
   vi.useRealTimers();
   setFeedbackEnabled(true);
 });
@@ -559,6 +566,117 @@ describe('App', () => {
       expect(
         screen.queryByRole('button', { name: /two players/i })
       ).toBeNull();
+    });
+  });
+
+  describe('offline persistence', () => {
+    it('shows no resume prompt on a fresh start (nothing saved yet)', () => {
+      render(<App />);
+      expect(screen.queryByText(/unfinished game/i)).toBeNull();
+      expect(
+        screen.getByRole('button', { name: /play vs ai/i })
+      ).toBeTruthy();
+    });
+
+    it('saves the game after a completed turn, and restores it exactly on a fresh mount', () => {
+      const first = renderVsAI();
+      fireEvent.click(screen.getByTestId('pit-7'));
+      // A single flush lands right after the player's move commits (turn
+      // switches to the ai, whose own timer hasn't fired yet) — see the
+      // "animates seed distribution..." test above for why one flush
+      // stops exactly there.
+      act(() => {
+        vi.runAllTimers();
+      });
+
+      const saved = loadSavedGame();
+      expect(saved).not.toBeNull();
+      expect(saved?.mode).toBe('vs-ai');
+      expect(saved?.gameState.status).toBe('in-progress');
+      expect(saved?.moveCount).toBe(1);
+
+      const boardBeforeRemount = pitButtons().map((b) => b.textContent);
+      first.unmount();
+
+      // Simulate a fresh app start (e.g. the page being reloaded) by
+      // rendering an entirely new instance.
+      render(<App />);
+      expect(screen.getByText(/unfinished game/i)).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: /continue game/i }));
+
+      expect(screen.getByText("AI's turn")).toBeTruthy();
+      expect(pitButtons().map((b) => b.textContent)).toEqual(
+        boardBeforeRemount
+      );
+    });
+
+    it('"New Game" from the resume prompt discards the save and shows mode-select', () => {
+      const first = renderVsAI();
+      fireEvent.click(screen.getByTestId('pit-7'));
+      act(() => {
+        vi.runAllTimers();
+      });
+      expect(loadSavedGame()).not.toBeNull();
+      first.unmount();
+
+      render(<App />);
+      fireEvent.click(screen.getByRole('button', { name: /new game/i }));
+
+      expect(loadSavedGame()).toBeNull();
+      expect(
+        screen.getByRole('button', { name: /play vs ai/i })
+      ).toBeTruthy();
+    });
+
+    it('clears the save and records a history entry once a game finishes', () => {
+      renderVsAI();
+
+      const isGameOver = () =>
+        screen.queryByTestId('game-over-overlay') !== null;
+      let iterations = 0;
+
+      while (!isGameOver() && iterations < 1000) {
+        const enabledPit = pitButtons().find((b) => !b.disabled);
+        if (enabledPit) fireEvent.click(enabledPit);
+        flushAllTimersTwice();
+        iterations++;
+      }
+
+      expect(isGameOver()).toBe(true);
+      expect(loadSavedGame()).toBeNull();
+
+      const history = loadHistory();
+      expect(history).toHaveLength(1);
+      expect(history[0].mode).toBe('vs-ai');
+      expect(['player', 'ai', 'draw']).toContain(history[0].winner);
+      expect(history[0].moveCount).toBeGreaterThan(0);
+      expect(history[0].playerScore + history[0].aiScore).toBeGreaterThan(0);
+    });
+
+    it('shows recorded games in the History screen', () => {
+      renderVsAI();
+      fireEvent.click(screen.getByTestId('pit-7'));
+      flushAllTimersTwice();
+
+      // Nothing in history yet (game still in progress).
+      fireEvent.click(screen.getByRole('button', { name: /history/i }));
+      expect(screen.getByText(/no games played yet/i)).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /close/i }));
+
+      // Finish the game, then check history shows it.
+      const isGameOver = () =>
+        screen.queryByTestId('game-over-overlay') !== null;
+      let iterations = 0;
+      while (!isGameOver() && iterations < 1000) {
+        const enabledPit = pitButtons().find((b) => !b.disabled);
+        if (enabledPit) fireEvent.click(enabledPit);
+        flushAllTimersTwice();
+        iterations++;
+      }
+
+      fireEvent.click(screen.getByRole('button', { name: /history/i }));
+      expect(screen.getAllByRole('listitem')).toHaveLength(1);
     });
   });
 });

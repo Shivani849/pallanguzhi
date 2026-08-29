@@ -12,6 +12,10 @@ import {
   turnStatusLabel,
 } from './gameMode';
 import { createControllers, isHumanController } from './controllers/createControllers';
+import type { SavedGame } from './persistence/gameSave';
+import { clearSavedGame, loadSavedGame, saveGame } from './persistence/gameSave';
+import type { GameHistoryEntry } from './persistence/gameHistory';
+import { appendHistoryEntry, loadHistory } from './persistence/gameHistory';
 import {
   isFeedbackEnabled,
   playCaptureSound,
@@ -28,6 +32,8 @@ import Board from './components/Board';
 import GameOverOverlay from './components/GameOverOverlay';
 import PassDeviceScreen from './components/PassDeviceScreen';
 import ModeSelectScreen from './components/ModeSelectScreen';
+import ResumeGameScreen from './components/ResumeGameScreen';
+import HistoryScreen from './components/HistoryScreen';
 import './App.css';
 
 // Game Engine -> Game State -> Player Controller.
@@ -39,8 +45,22 @@ import './App.css';
 // produce a move, and applies whatever comes back through the exact
 // same makeMove() pipeline regardless of whether that controller is a
 // HumanPlayerController or an AIPlayerController.
+//
+// This app has no real AI difficulty selector (the AI always plays
+// uniform-random moves — see game/ai/AIController.ts), so this is just a
+// placeholder value persisted for a future difficulty setting.
+const DEFAULT_AI_DIFFICULTY = 'normal';
 
 function App() {
+  // Checked once, at mount: is there an unfinished game saved locally?
+  const [pendingResume, setPendingResume] = useState<SavedGame | null>(() =>
+    loadSavedGame()
+  );
+  const [history, setHistory] = useState<GameHistoryEntry[]>(() =>
+    loadHistory()
+  );
+  const [historyVisible, setHistoryVisible] = useState(false);
+
   const [mode, setMode] = useState<GameMode | null>(null);
   const [gameState, setGameState] = useState<GameState>(() =>
     createInitialGameState()
@@ -59,6 +79,11 @@ function App() {
   // hasn't ended), blocking the board until the next player taps Continue
   // on the "pass the device" screen.
   const [awaitingPassDevice, setAwaitingPassDevice] = useState(false);
+
+  // How many moves have been played in the current game — persisted with
+  // the save, and recorded in history once the game ends. Doesn't need to
+  // be React state: nothing ever needs to re-render off of it directly.
+  const moveCountRef = useRef(0);
 
   // One controller per seat ('player'/'ai'), assigned according to mode.
   // Recreated only when the mode changes — a fresh pair for a fresh
@@ -88,6 +113,8 @@ function App() {
   // feeds back into gameplay.
   const applyMove = useCallback(
     (pitId: number, fromState: GameState) => {
+      if (!mode) return; // defensive: a move should never be requested before a mode is chosen
+
       const result = makeMove(fromState, pitId);
       const frames = buildTimeline(fromState.pits, result);
 
@@ -114,6 +141,37 @@ function App() {
         setAnimationFrame(null);
         setIsAnimating(false);
         playEndOfMoveFeedback();
+        moveCountRef.current += 1;
+
+        // Save after every completed turn — either the finished-game
+        // result goes into history and the in-progress save is cleared,
+        // or the still-unfinished game is (re-)saved so it can be
+        // resumed later.
+        if (result.gameOver) {
+          clearSavedGame();
+          const entry: GameHistoryEntry = {
+            date: new Date().toISOString(),
+            mode,
+            winner:
+              result.status === 'player-won'
+                ? 'player'
+                : result.status === 'ai-won'
+                  ? 'ai'
+                  : 'draw',
+            playerScore: result.gameState.playerCollectedSeeds,
+            aiScore: result.gameState.aiCollectedSeeds,
+            moveCount: moveCountRef.current,
+          };
+          setHistory(appendHistoryEntry(entry));
+        } else {
+          saveGame({
+            mode,
+            difficulty: mode === 'vs-ai' ? DEFAULT_AI_DIFFICULTY : null,
+            gameState: result.gameState,
+            moveCount: moveCountRef.current,
+          });
+        }
+
         // In two-players mode, every completed move (that doesn't end
         // the game) hands off to the pass-device screen before the next
         // player can act.
@@ -225,6 +283,7 @@ function App() {
     timeoutIdsRef.current = [];
     controllers?.player.cancelPendingMove();
     controllers?.ai.cancelPendingMove();
+    moveCountRef.current = 0;
     setIsAnimating(false);
     setAnimationFrame(null);
     setAwaitingPassDevice(false);
@@ -234,6 +293,25 @@ function App() {
   const handleSelectMode = (chosenMode: GameMode) => {
     setMode(chosenMode);
     startNewGame();
+  };
+
+  // Restores exactly the saved snapshot — same mode, same board, same
+  // move count — and lets play continue from there.
+  const handleContinueGame = () => {
+    if (!pendingResume) return;
+    moveCountRef.current = pendingResume.moveCount;
+    setMode(pendingResume.mode);
+    setGameState(pendingResume.gameState);
+    setIsAnimating(false);
+    setAnimationFrame(null);
+    setAwaitingPassDevice(false);
+    setPendingResume(null);
+  };
+
+  const handleDiscardResumeAndStartNew = () => {
+    clearSavedGame();
+    setPendingResume(null);
+    // mode stays null — the mode-select screen shows next.
   };
 
   const handleToggleAudio = () => {
@@ -248,17 +326,32 @@ function App() {
 
   return (
     <div className="app">
-      <button
-        type="button"
-        className="sound-toggle"
-        onClick={handleToggleAudio}
-        aria-label={audioEnabled ? 'Mute sound' : 'Unmute sound'}
-        aria-pressed={audioEnabled}
-      >
-        {audioEnabled ? '🔊' : '🔈'}
-      </button>
+      <div className="top-controls">
+        <button
+          type="button"
+          className="icon-button"
+          onClick={() => setHistoryVisible(true)}
+          aria-label="View game history"
+        >
+          📜
+        </button>
+        <button
+          type="button"
+          className="icon-button"
+          onClick={handleToggleAudio}
+          aria-label={audioEnabled ? 'Mute sound' : 'Unmute sound'}
+          aria-pressed={audioEnabled}
+        >
+          {audioEnabled ? '🔊' : '🔈'}
+        </button>
+      </div>
 
-      {!mode ? (
+      {pendingResume ? (
+        <ResumeGameScreen
+          onContinue={handleContinueGame}
+          onNewGame={handleDiscardResumeAndStartNew}
+        />
+      ) : !mode ? (
         <ModeSelectScreen onSelectMode={handleSelectMode} />
       ) : (
         <>
@@ -314,6 +407,12 @@ function App() {
           />
         </>
       )}
+
+      <HistoryScreen
+        visible={historyVisible}
+        entries={history}
+        onClose={() => setHistoryVisible(false)}
+      />
     </div>
   );
 }

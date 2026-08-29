@@ -17,4 +17,16 @@ fileignoreconfig:
   checksum: bd4d0a0c61db6b3abd5e0a4c4db36ef1985e5f518ad03bb7b5877efcaac19553
 - filename: src/App.test.tsx
   checksum: eed53b8ff8c2ff447072119cba9df0651df34fb05b9e6ad634d0515e0089e58b
+- filename: src/components/ResumeGameScreen.tsx
+  checksum: 59f1b104b3fe2fe1049986627547f5ba99dd65dbcdaf147f040ff7e3c40f07a0
+- filename: src/persistence/localStorageSafe.ts
+  checksum: 94ed4745d24ea66e458a64a73bb008f29e9cfaeb6d190cca716cd6d0874ffadb
+- filename: src/persistence/localStorageSafe.test.ts
+  checksum: 8acff2e85b671675ec6108904bd8d011f4ef2c60d25e2ece3c3dbcb7445b0d7f
+- filename: src/persistence/gameSave.ts
+  checksum: 7dba72619dd32d223ac6ca8626b4325e7e6c3ae161318b4d877da1987abf9a39
+- filename: src/persistence/gameHistory.ts
+  checksum: 0f9c97d498cdf9e82a8cd5068a2698ec58cf25954a7f70c6ed542ef6f46996da
+- filename: src/components/HistoryScreen.tsx
+  checksum: f201bcbea93d843926ed9327691400a77a398c3ab7b36c630469274675c4f994
 version: "1.0"
