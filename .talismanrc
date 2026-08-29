@@ -8,7 +8,7 @@ fileignoreconfig:
 - filename: src/animation/timeline.test.ts
   checksum: a996a346d7046969282c35d93f583a2244db249579dc37df6ce6b17704da7811
 - filename: src/App.tsx
-  checksum: 220d2b21022fb3c0273c6865eedb68259c440569c012beebe15ae2cd38b9eda3
+  checksum: bdab3704fe41cee26698d860bacd5c36a1f4cbc1eecac581c1d909d3b29f9167
 - filename: src/audio/soundManager.test.ts
   checksum: 8732eca594f9dba861788cb070627366d68b73c5d5a28a9225aee9e4832da0ec
 - filename: src/audio/soundManager.ts
@@ -29,4 +29,8 @@ fileignoreconfig:
   checksum: 0f9c97d498cdf9e82a8cd5068a2698ec58cf25954a7f70c6ed542ef6f46996da
 - filename: src/components/HistoryScreen.tsx
   checksum: f201bcbea93d843926ed9327691400a77a398c3ab7b36c630469274675c4f994
+- filename: src/persistence/onboarding.ts
+  checksum: 427b58b26245feba95f51f43dd4bae151de3f9352d7463ffe5dddd90c214aa7f
+- filename: src/components/HomeScreen.tsx
+  checksum: 10187974323a6e298725378056282b1c1182c53002b855bc1ae6b3f4811f4865
 version: "1.0"

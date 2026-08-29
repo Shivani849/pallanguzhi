@@ -16,6 +16,7 @@ import type { SavedGame } from './persistence/gameSave';
 import { clearSavedGame, loadSavedGame, saveGame } from './persistence/gameSave';
 import type { GameHistoryEntry } from './persistence/gameHistory';
 import { appendHistoryEntry, loadHistory } from './persistence/gameHistory';
+import { hasSeenWelcomePrompt, markWelcomePromptSeen } from './persistence/onboarding';
 import {
   isFeedbackEnabled,
   playCaptureSound,
@@ -31,8 +32,11 @@ import { hapticSelect } from './audio/haptics';
 import Board from './components/Board';
 import GameOverOverlay from './components/GameOverOverlay';
 import PassDeviceScreen from './components/PassDeviceScreen';
-import ModeSelectScreen from './components/ModeSelectScreen';
-import ResumeGameScreen from './components/ResumeGameScreen';
+import HomeScreen from './components/HomeScreen';
+import HowToPlayScreen from './components/HowToPlayScreen';
+import TutorialScreen from './components/TutorialScreen';
+import GameMenuOverlay from './components/GameMenuOverlay';
+import type { GameMenuView } from './components/GameMenuOverlay';
 import HistoryScreen from './components/HistoryScreen';
 import StatisticsScreen from './components/StatisticsScreen';
 import './App.css';
@@ -52,6 +56,12 @@ import './App.css';
 // placeholder value persisted for a future difficulty setting.
 const DEFAULT_AI_DIFFICULTY = 'normal';
 
+// Which top-level "page" is showing. Home is the app's single entry
+// point; How to Play and the interactive Tutorial are reached from it and
+// always return to it. `mode`/`gameState` below are only meaningful while
+// screen === 'game'.
+type Screen = 'home' | 'game' | 'how-to-play' | 'tutorial';
+
 function App() {
   // Checked once, at mount: is there an unfinished game saved locally?
   const [pendingResume, setPendingResume] = useState<SavedGame | null>(() =>
@@ -62,6 +72,17 @@ function App() {
   );
   const [historyVisible, setHistoryVisible] = useState(false);
   const [statisticsVisible, setStatisticsVisible] = useState(false);
+
+  const [screen, setScreen] = useState<Screen>('home');
+  // Shown at most once ever, the very first time Home renders — see
+  // persistence/onboarding.ts. Marking it seen happens unconditionally on
+  // mount (below) so it never reappears on a later mount either.
+  const [showWelcomePrompt, setShowWelcomePrompt] = useState(
+    () => !hasSeenWelcomePrompt()
+  );
+  useEffect(() => {
+    markWelcomePromptSeen();
+  }, []);
 
   const [mode, setMode] = useState<GameMode | null>(null);
   const [gameState, setGameState] = useState<GameState>(() =>
@@ -81,6 +102,9 @@ function App() {
   // hasn't ended), blocking the board until the next player taps Continue
   // on the "pass the device" screen.
   const [awaitingPassDevice, setAwaitingPassDevice] = useState(false);
+  // The pause/menu overlay reachable mid-game, and its two confirmation
+  // sub-views (restart, leave-to-home) — see GameMenuOverlay.
+  const [gameMenuView, setGameMenuView] = useState<GameMenuView>('closed');
 
   // How many moves have been played in the current game — persisted with
   // the save, and recorded in history once the game ends. Doesn't need to
@@ -238,7 +262,12 @@ function App() {
   // this kicks off its "thinking" timer. Either way, the same applyMove()
   // runs once a pit id comes back — the engine never knows or cares
   // which kind of controller supplied it.
+  //
+  // Gated on screen === 'game': leaving the game screen (e.g. "Save & Go
+  // Home") must not let the AI keep silently playing in the background
+  // while the user is looking at the Home screen.
   useEffect(() => {
+    if (screen !== 'game') return;
     if (!mode || !controllers) return;
     if (isAnimating || awaitingPassDevice) return;
     if (gameState.status !== 'in-progress') return;
@@ -249,7 +278,7 @@ function App() {
     });
 
     return () => controller.cancelPendingMove();
-  }, [mode, controllers, gameState, isAnimating, awaitingPassDevice, applyMove]);
+  }, [screen, mode, controllers, gameState, isAnimating, awaitingPassDevice, applyMove]);
 
   const currentController = mode && controllers ? controllers[gameState.currentTurn] : null;
   const isHumanTurnRightNow =
@@ -287,7 +316,10 @@ function App() {
   );
 
   // Cancels anything pending and starts a completely fresh game, keeping
-  // whichever mode is currently active.
+  // whichever mode is currently active. Also clears any unfinished save —
+  // every caller (Play Again, a fresh mode choice, Restart) means "the
+  // previous unfinished game no longer exists", so there's nothing left
+  // to accidentally resume into afterwards.
   const startNewGame = useCallback(() => {
     timeoutIdsRef.current.forEach((id) => window.clearTimeout(id));
     timeoutIdsRef.current = [];
@@ -298,11 +330,14 @@ function App() {
     setAnimationFrame(null);
     setAwaitingPassDevice(false);
     setGameState(createInitialGameState());
+    clearSavedGame();
+    setPendingResume(null);
   }, [controllers]);
 
   const handleSelectMode = (chosenMode: GameMode) => {
     setMode(chosenMode);
     startNewGame();
+    setScreen('game');
   };
 
   // Restores exactly the saved snapshot — same mode, same board, same
@@ -316,12 +351,7 @@ function App() {
     setAnimationFrame(null);
     setAwaitingPassDevice(false);
     setPendingResume(null);
-  };
-
-  const handleDiscardResumeAndStartNew = () => {
-    clearSavedGame();
-    setPendingResume(null);
-    // mode stays null — the mode-select screen shows next.
+    setScreen('game');
   };
 
   const handleToggleAudio = () => {
@@ -332,11 +362,75 @@ function App() {
     if (nowEnabled) playSelectSound();
   };
 
+  // --- Game menu: pause/resume, restart, back to home -------------------
+
+  // Abandons whatever move animation is currently in flight (if any)
+  // without ever committing it — used only when leaving the game screen
+  // entirely (Save & Go Home) mid-animation, so a move the user already
+  // walked away from can't silently finish and overwrite what was just
+  // saved once its timers eventually fire.
+  const abandonPendingAnimation = () => {
+    timeoutIdsRef.current.forEach((id) => window.clearTimeout(id));
+    timeoutIdsRef.current = [];
+    setIsAnimating(false);
+    setAnimationFrame(null);
+  };
+
+  const openGameMenu = () => setGameMenuView('menu');
+  const handleResumeFromMenu = () => setGameMenuView('closed');
+  const handleRequestRestart = () => setGameMenuView('confirm-restart');
+  const handleCancelRestart = () => setGameMenuView('menu');
+  const handleConfirmRestart = () => {
+    startNewGame();
+    setGameMenuView('closed');
+  };
+  const handleRequestBackToHomeFromMenu = () => setGameMenuView('confirm-leave');
+  const handleCancelLeave = () => setGameMenuView('menu');
+  const handleConfirmSaveAndGoHome = () => {
+    abandonPendingAnimation();
+    if (mode) {
+      saveGame({
+        mode,
+        difficulty: mode === 'vs-ai' ? DEFAULT_AI_DIFFICULTY : null,
+        gameState,
+        moveCount: moveCountRef.current,
+      });
+      setPendingResume(loadSavedGame());
+    }
+    setGameMenuView('closed');
+    setScreen('home');
+  };
+  // The game already ended — it was already cleared from the save and
+  // recorded in history when it finished, so there's nothing to confirm.
+  const handleBackToHomeDirect = () => setScreen('home');
+
+  // --- Home / How to Play / Tutorial navigation --------------------------
+
+  const handleOpenHowToPlay = () => setScreen('how-to-play');
+  const handleBackToHomeFromHowToPlay = () => setScreen('home');
+  const handleStartTutorial = () => setScreen('tutorial');
+  const handleExitTutorial = () => setScreen('home');
+  const handleLearnToPlay = () => {
+    setShowWelcomePrompt(false);
+    setScreen('tutorial');
+  };
+  const handleDismissWelcomePrompt = () => setShowWelcomePrompt(false);
+
   const displayPits = animationFrame?.pits ?? gameState.pits;
 
   return (
     <div className="app">
       <div className="top-controls">
+        {screen === 'game' && gameState.status === 'in-progress' && (
+          <button
+            type="button"
+            className="icon-button"
+            onClick={openGameMenu}
+            aria-label="Open game menu"
+          >
+            ☰
+          </button>
+        )}
         <button
           type="button"
           className="icon-button"
@@ -364,14 +458,35 @@ function App() {
         </button>
       </div>
 
-      {pendingResume ? (
-        <ResumeGameScreen
-          onContinue={handleContinueGame}
-          onNewGame={handleDiscardResumeAndStartNew}
+      {screen === 'home' && (
+        <HomeScreen
+          hasUnfinishedGame={pendingResume !== null}
+          onSelectMode={handleSelectMode}
+          onContinueGame={handleContinueGame}
+          onHowToPlay={handleOpenHowToPlay}
+          onStatistics={() => setStatisticsVisible(true)}
+          showWelcomePrompt={showWelcomePrompt}
+          onLearnToPlay={handleLearnToPlay}
+          onDismissWelcomePrompt={handleDismissWelcomePrompt}
         />
-      ) : !mode ? (
-        <ModeSelectScreen onSelectMode={handleSelectMode} />
-      ) : (
+      )}
+
+      {screen === 'how-to-play' && (
+        <HowToPlayScreen
+          onStartTutorial={handleStartTutorial}
+          onBackToHome={handleBackToHomeFromHowToPlay}
+        />
+      )}
+
+      {screen === 'tutorial' && (
+        <TutorialScreen
+          onExit={handleExitTutorial}
+          onPlayVsAI={() => handleSelectMode('vs-ai')}
+          onPlayTwoPlayers={() => handleSelectMode('two-players')}
+        />
+      )}
+
+      {screen === 'game' && mode && (
         <>
           <h1 className="app-title">Pallanguzhi</h1>
 
@@ -422,6 +537,18 @@ function App() {
             rightLabel={sideLabel(mode, 'player')}
             rightScore={gameState.playerCollectedSeeds}
             onPlayAgain={startNewGame}
+            onBackToHome={handleBackToHomeDirect}
+          />
+
+          <GameMenuOverlay
+            view={gameMenuView}
+            onResume={handleResumeFromMenu}
+            onRequestRestart={handleRequestRestart}
+            onCancelRestart={handleCancelRestart}
+            onConfirmRestart={handleConfirmRestart}
+            onRequestBackToHome={handleRequestBackToHomeFromMenu}
+            onCancelLeave={handleCancelLeave}
+            onConfirmSaveAndGoHome={handleConfirmSaveAndGoHome}
           />
         </>
       )}

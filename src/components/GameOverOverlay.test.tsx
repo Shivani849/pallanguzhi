@@ -71,4 +71,38 @@ describe('GameOverOverlay', () => {
 
     expect(onPlayAgain).toHaveBeenCalledTimes(1);
   });
+
+  it('does not show a Back to Home button when onBackToHome is not given', () => {
+    render(
+      <GameOverOverlay
+        title="Draw"
+        leftLabel="AI"
+        leftScore={1}
+        rightLabel="You"
+        rightScore={1}
+        onPlayAgain={() => {}}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: /back to home/i })).toBeNull();
+  });
+
+  it('calls onBackToHome when the Back to Home button is clicked', () => {
+    const onBackToHome = vi.fn();
+    render(
+      <GameOverOverlay
+        title="You Win!"
+        leftLabel="AI"
+        leftScore={20}
+        rightLabel="You"
+        rightScore={64}
+        onPlayAgain={() => {}}
+        onBackToHome={onBackToHome}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /back to home/i }));
+
+    expect(onBackToHome).toHaveBeenCalledTimes(1);
+  });
 });

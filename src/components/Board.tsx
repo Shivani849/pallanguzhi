@@ -9,6 +9,9 @@ interface BoardProps {
   activePitId?: number | null;
   landingPitId?: number | null;
   capturedPitIds?: ReadonlySet<number>;
+  // Tutorial-only: pits to show a non-interactive "look here" ring on.
+  // Omitted (or empty) everywhere else in the app.
+  highlightedPitIds?: ReadonlySet<number>;
 }
 
 // Renders purely from the given pits (+ which are currently valid moves,
@@ -21,6 +24,7 @@ function Board({
   activePitId = null,
   landingPitId = null,
   capturedPitIds,
+  highlightedPitIds,
 }: BoardProps) {
   const aiPits = pits
     .filter((pit) => pit.owner === 'ai')
@@ -39,6 +43,7 @@ function Board({
       active={pit.id === activePitId}
       landing={pit.id === landingPitId}
       captured={capturedPitIds?.has(pit.id) ?? false}
+      highlighted={highlightedPitIds?.has(pit.id) ?? false}
     />
   );
 

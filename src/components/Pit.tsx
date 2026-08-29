@@ -8,6 +8,9 @@ interface PitProps {
   active?: boolean; // this pit is currently being sown from
   landing?: boolean; // a seed just landed here
   captured?: boolean; // this pit was just cleared by a capture
+  // Tutorial-only: a non-interactive "look here" ring, distinct from the
+  // selectable-pit pulse. Never set outside TutorialScreen.
+  highlighted?: boolean;
 }
 
 // Purely presentational — rendering, click reporting, and highlight
@@ -27,6 +30,7 @@ function Pit({
   active = false,
   landing = false,
   captured = false,
+  highlighted = false,
 }: PitProps) {
   const handleClick = () => {
     if (!selectable) return;
@@ -37,6 +41,7 @@ function Pit({
   if (active) classNames.push('pit--active');
   if (landing) classNames.push('pit--landing');
   if (captured) classNames.push('pit--captured');
+  if (highlighted) classNames.push('pit--tutorial-highlight');
 
   return (
     <button

@@ -34,16 +34,27 @@ function flushAllTimersTwice() {
   });
 }
 
-// Mode selection is now the entry screen — most existing tests just want
-// straight to a vs-ai board, same as before that screen existed.
+// The first-ever Home render shows a one-time welcome prompt (see
+// persistence/onboarding.ts) that hides the main buttons — dismiss it
+// with "Play Now" so tests that just want a board can get straight there,
+// the same as before that prompt existed.
+function dismissWelcomePromptIfPresent() {
+  const playNow = screen.queryByRole('button', { name: /play now/i });
+  if (playNow) fireEvent.click(playNow);
+}
+
+// Home is the entry screen — most existing tests just want straight to a
+// vs-ai board, same as before Home existed.
 function renderVsAI() {
   const utils = render(<App />);
+  dismissWelcomePromptIfPresent();
   fireEvent.click(screen.getByRole('button', { name: /play vs ai/i }));
   return utils;
 }
 
 function renderTwoPlayers() {
   const utils = render(<App />);
+  dismissWelcomePromptIfPresent();
   fireEvent.click(screen.getByRole('button', { name: /two players/i }));
   return utils;
 }
@@ -389,9 +400,14 @@ describe('App', () => {
     });
   });
 
-  describe('mode selection', () => {
-    it('shows the mode-select screen first, with no board', () => {
+  describe('home screen', () => {
+    it('shows the Home screen first (behind the one-time welcome prompt), with no board', () => {
       render(<App />);
+
+      expect(screen.getByText(/new to pallanguzhi/i)).toBeTruthy();
+      expect(screen.queryByTestId('pit-0')).toBeNull();
+
+      dismissWelcomePromptIfPresent();
 
       expect(
         screen.getByRole('button', { name: /play vs ai/i })
@@ -399,7 +415,19 @@ describe('App', () => {
       expect(
         screen.getByRole('button', { name: /two players/i })
       ).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: /how to play/i })
+      ).toBeTruthy();
       expect(screen.queryByTestId('pit-0')).toBeNull();
+    });
+
+    it('does not show Continue Game when there is no unfinished game', () => {
+      render(<App />);
+      dismissWelcomePromptIfPresent();
+
+      expect(
+        screen.queryByRole('button', { name: /continue game/i })
+      ).toBeNull();
     });
 
     it('choosing "Play vs AI" starts a fresh vs-ai game', () => {
@@ -570,9 +598,12 @@ describe('App', () => {
   });
 
   describe('offline persistence', () => {
-    it('shows no resume prompt on a fresh start (nothing saved yet)', () => {
+    it('shows no Continue Game button on a fresh start (nothing saved yet)', () => {
       render(<App />);
-      expect(screen.queryByText(/unfinished game/i)).toBeNull();
+      dismissWelcomePromptIfPresent();
+      expect(
+        screen.queryByRole('button', { name: /continue game/i })
+      ).toBeNull();
       expect(
         screen.getByRole('button', { name: /play vs ai/i })
       ).toBeTruthy();
@@ -599,9 +630,13 @@ describe('App', () => {
       first.unmount();
 
       // Simulate a fresh app start (e.g. the page being reloaded) by
-      // rendering an entirely new instance.
+      // rendering an entirely new instance. The welcome prompt doesn't
+      // reappear (it was already marked seen by the first mount above),
+      // so Home's Continue Game button is immediately visible.
       render(<App />);
-      expect(screen.getByText(/unfinished game/i)).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: /continue game/i })
+      ).toBeTruthy();
 
       fireEvent.click(screen.getByRole('button', { name: /continue game/i }));
 
@@ -611,7 +646,7 @@ describe('App', () => {
       );
     });
 
-    it('"New Game" from the resume prompt discards the save and shows mode-select', () => {
+    it('starting a fresh mode from Home discards an old unfinished save', () => {
       const first = renderVsAI();
       fireEvent.click(screen.getByTestId('pit-7'));
       act(() => {
@@ -621,12 +656,15 @@ describe('App', () => {
       first.unmount();
 
       render(<App />);
-      fireEvent.click(screen.getByRole('button', { name: /new game/i }));
+      expect(
+        screen.getByRole('button', { name: /continue game/i })
+      ).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: /play vs ai/i }));
 
       expect(loadSavedGame()).toBeNull();
-      expect(
-        screen.getByRole('button', { name: /play vs ai/i })
-      ).toBeTruthy();
+      expect(screen.getByText('Your turn')).toBeTruthy();
+      expect(totalSeedsOnBoard()).toBe(TOTAL_SEEDS);
     });
 
     it('clears the save and records a history entry once a game finishes', () => {
@@ -723,6 +761,352 @@ describe('App', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /close/i }));
       expect(screen.queryByTestId('statistics-overlay')).toBeNull();
+    });
+  });
+
+  describe('game menu', () => {
+    function openMenu() {
+      fireEvent.click(screen.getByRole('button', { name: /open game menu/i }));
+    }
+
+    it('shows a pause/menu icon during an in-progress game', () => {
+      renderVsAI();
+      expect(
+        screen.getByRole('button', { name: /open game menu/i })
+      ).toBeTruthy();
+    });
+
+    it('Resume closes the menu without changing anything', () => {
+      renderVsAI();
+      openMenu();
+      expect(screen.getByTestId('game-menu-overlay')).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: /^resume$/i }));
+
+      expect(screen.queryByTestId('game-menu-overlay')).toBeNull();
+      expect(screen.getByText('Your turn')).toBeTruthy();
+      expect(totalSeedsOnBoard()).toBe(TOTAL_SEEDS);
+    });
+
+    describe('restart', () => {
+      it('shows a confirmation, and Cancel leaves the game unchanged', () => {
+        renderVsAI();
+        fireEvent.click(screen.getByTestId('pit-7'));
+        act(() => {
+          vi.runAllTimers();
+        }); // one flush: now the AI's turn, its own timer still pending
+
+        openMenu();
+        fireEvent.click(screen.getByRole('button', { name: /restart game/i }));
+        expect(screen.getByText(/restart this game\?/i)).toBeTruthy();
+        expect(screen.getByText(/progress will be lost/i)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+        // Cancel returns to the game menu itself (not fully closed), and
+        // the game is exactly as it was — still the ai's turn, not reset.
+        expect(screen.getByText('Game Menu')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: /^resume$/i }));
+        expect(screen.queryByTestId('game-menu-overlay')).toBeNull();
+        expect(screen.getByText("AI's turn")).toBeTruthy();
+      });
+
+      it('Restart Game resets the board, scores, and turn completely, with no stale animation state, and clears the old save', () => {
+        renderVsAI();
+        fireEvent.click(screen.getByTestId('pit-7'));
+        act(() => {
+          vi.runAllTimers();
+        });
+        expect(loadSavedGame()).not.toBeNull();
+
+        openMenu();
+        fireEvent.click(screen.getByRole('button', { name: /restart game/i }));
+        fireEvent.click(screen.getByRole('button', { name: /restart game/i })); // confirm
+
+        expect(screen.queryByTestId('game-menu-overlay')).toBeNull();
+        expect(screen.getByText('Your turn')).toBeTruthy();
+        expect(totalSeedsOnBoard()).toBe(TOTAL_SEEDS);
+        expect(Number(screen.getByText('You').nextSibling?.textContent)).toBe(
+          0
+        );
+        expect(Number(screen.getByText('AI').nextSibling?.textContent)).toBe(
+          0
+        );
+        for (const button of pitButtons()) {
+          expect(button.className).not.toContain('pit--active');
+          expect(button.className).not.toContain('pit--landing');
+        }
+        expect(loadSavedGame()).toBeNull();
+
+        // Nothing further happens even after flushing timers again — no
+        // dangling animation/AI timer survived the restart.
+        act(() => {
+          vi.runAllTimers();
+        });
+        expect(screen.getByText('Your turn')).toBeTruthy();
+      });
+
+      it('restarting mid-animation does not throw and leaves no stale animation state', () => {
+        renderVsAI();
+        fireEvent.click(screen.getByTestId('pit-7')); // animation in flight
+
+        openMenu();
+        fireEvent.click(screen.getByRole('button', { name: /restart game/i }));
+
+        expect(() =>
+          fireEvent.click(
+            screen.getByRole('button', { name: /restart game/i })
+          )
+        ).not.toThrow();
+
+        expect(screen.getByText('Your turn')).toBeTruthy();
+        expect(totalSeedsOnBoard()).toBe(TOTAL_SEEDS);
+        for (const button of pitButtons()) {
+          expect(button.className).not.toContain('pit--active');
+        }
+
+        // Any timers left over from the abandoned animation are inert.
+        expect(() => {
+          act(() => {
+            vi.runAllTimers();
+          });
+        }).not.toThrow();
+      });
+    });
+
+    describe('back to home', () => {
+      it('an unfinished game shows a confirmation before leaving', () => {
+        renderVsAI();
+        openMenu();
+        fireEvent.click(screen.getByRole('button', { name: /back to home/i }));
+
+        expect(screen.getByText(/leave current game\?/i)).toBeTruthy();
+        expect(screen.getByText(/saved locally/i)).toBeTruthy();
+        expect(
+          screen.getByRole('button', { name: /continue playing/i })
+        ).toBeTruthy();
+        expect(
+          screen.getByRole('button', { name: /save & go home/i })
+        ).toBeTruthy();
+      });
+
+      it('"Continue Playing" cancels and returns to the game, unchanged', () => {
+        renderVsAI();
+        openMenu();
+        fireEvent.click(screen.getByRole('button', { name: /back to home/i }));
+
+        fireEvent.click(
+          screen.getByRole('button', { name: /continue playing/i })
+        );
+
+        // Returns to the game menu itself (not fully closed) — the game
+        // underneath is untouched.
+        expect(screen.getByText('Game Menu')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: /^resume$/i }));
+        expect(screen.queryByTestId('game-menu-overlay')).toBeNull();
+        expect(screen.getByText('Your turn')).toBeTruthy();
+        expect(totalSeedsOnBoard()).toBe(TOTAL_SEEDS);
+      });
+
+      it('"Save & Go Home" saves the game and returns to Home, and Continue Game restores the exact board and turn', () => {
+        renderVsAI();
+        fireEvent.click(screen.getByTestId('pit-7'));
+        act(() => {
+          vi.runAllTimers();
+        }); // move committed, now the ai's turn
+        const boardBeforeLeaving = pitButtons().map((b) => b.textContent);
+
+        openMenu();
+        fireEvent.click(screen.getByRole('button', { name: /back to home/i }));
+        fireEvent.click(
+          screen.getByRole('button', { name: /save & go home/i })
+        );
+
+        // Back on Home, no board showing.
+        expect(screen.queryByTestId('pit-0')).toBeNull();
+        expect(
+          screen.getByRole('button', { name: /continue game/i })
+        ).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: /continue game/i }));
+
+        expect(screen.getByText("AI's turn")).toBeTruthy();
+        expect(pitButtons().map((b) => b.textContent)).toEqual(
+          boardBeforeLeaving
+        );
+
+        // Nothing kept playing in the background while on Home — the ai's
+        // pending "thinking" timer was cancelled, not just hidden.
+      });
+
+      it('does not let the ai keep playing in the background after leaving to Home', () => {
+        renderVsAI();
+        fireEvent.click(screen.getByTestId('pit-7'));
+        act(() => {
+          vi.runAllTimers();
+        }); // now the ai's turn, its thinking timer is pending
+
+        openMenu();
+        fireEvent.click(screen.getByRole('button', { name: /back to home/i }));
+        fireEvent.click(
+          screen.getByRole('button', { name: /save & go home/i })
+        );
+
+        const savedBefore = loadSavedGame();
+
+        // If the ai's pending move weren't cancelled, flushing timers now
+        // would let it play and re-save a different (further-advanced)
+        // state while the user is on Home.
+        act(() => {
+          vi.runAllTimers();
+        });
+
+        expect(loadSavedGame()).toEqual(savedBefore);
+      });
+
+      it('a finished game returns to Home directly, with no confirmation', () => {
+        renderVsAI();
+
+        const isGameOver = () =>
+          screen.queryByTestId('game-over-overlay') !== null;
+        let iterations = 0;
+        while (!isGameOver() && iterations < 1000) {
+          const enabledPit = pitButtons().find((b) => !b.disabled);
+          if (enabledPit) fireEvent.click(enabledPit);
+          flushAllTimersTwice();
+          iterations++;
+        }
+        expect(isGameOver()).toBe(true);
+
+        // No pause/menu icon once the game has ended.
+        expect(
+          screen.queryByRole('button', { name: /open game menu/i })
+        ).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: /back to home/i }));
+
+        expect(screen.queryByTestId('game-over-overlay')).toBeNull();
+        expect(
+          screen.getByRole('button', { name: /play vs ai/i })
+        ).toBeTruthy();
+        expect(screen.queryByText(/leave current game\?/i)).toBeNull();
+      });
+    });
+  });
+
+  describe('how to play navigation', () => {
+    it('How to Play opens the rules screen from Home, and Back to Home returns', () => {
+      render(<App />);
+      dismissWelcomePromptIfPresent();
+
+      fireEvent.click(screen.getByRole('button', { name: /how to play/i }));
+      expect(screen.getByText(/14 pits/i)).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: /back to home/i }));
+      expect(
+        screen.getByRole('button', { name: /play vs ai/i })
+      ).toBeTruthy();
+    });
+
+    it('Start Interactive Tutorial opens the tutorial', () => {
+      render(<App />);
+      dismissWelcomePromptIfPresent();
+      fireEvent.click(screen.getByRole('button', { name: /how to play/i }));
+
+      fireEvent.click(
+        screen.getByRole('button', { name: /start interactive tutorial/i })
+      );
+
+      expect(screen.getByText('This is your side of the board.')).toBeTruthy();
+    });
+  });
+
+  describe('tutorial navigation', () => {
+    it('"Learn to Play" from the first-time welcome prompt goes straight into the tutorial', () => {
+      render(<App />);
+
+      fireEvent.click(screen.getByRole('button', { name: /learn to play/i }));
+
+      expect(screen.getByText('This is your side of the board.')).toBeTruthy();
+    });
+
+    it('exiting the tutorial returns to Home without touching an existing unfinished save', () => {
+      const first = renderVsAI();
+      fireEvent.click(screen.getByTestId('pit-7'));
+      act(() => {
+        vi.runAllTimers();
+      });
+      const savedBefore = loadSavedGame();
+      first.unmount();
+
+      render(<App />);
+      fireEvent.click(screen.getByRole('button', { name: /how to play/i }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /start interactive tutorial/i })
+      );
+
+      expect(() =>
+        fireEvent.click(
+          screen.getByRole('button', { name: /exit tutorial/i })
+        )
+      ).not.toThrow();
+
+      expect(
+        screen.getByRole('button', { name: /continue game/i })
+      ).toBeTruthy();
+      expect(loadSavedGame()).toEqual(savedBefore);
+    });
+
+    it('completing the tutorial and choosing Play vs AI starts a real game', () => {
+      render(<App />);
+      dismissWelcomePromptIfPresent();
+      fireEvent.click(screen.getByRole('button', { name: /how to play/i }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /start interactive tutorial/i })
+      );
+
+      // Walk through every step to reach completion.
+      fireEvent.click(screen.getByRole('button', { name: /next/i }));
+      fireEvent.click(screen.getByRole('button', { name: /next/i }));
+      fireEvent.click(screen.getByTestId('pit-7'));
+      act(() => {
+        vi.runAllTimers();
+      });
+      fireEvent.click(screen.getByRole('button', { name: /next/i }));
+      fireEvent.click(screen.getByRole('button', { name: /next/i }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /show opponent's move/i })
+      );
+      act(() => {
+        vi.runAllTimers();
+      });
+      fireEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      expect(screen.getByText("You're ready to play!")).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: /^play vs ai$/i }));
+
+      // A real, fresh vs-ai game — not the tutorial's scripted board.
+      expect(screen.getByText('Your turn')).toBeTruthy();
+      expect(totalSeedsOnBoard()).toBe(TOTAL_SEEDS);
+    });
+
+    it('the tutorial can be replayed from How to Play after finishing it once', () => {
+      render(<App />);
+      dismissWelcomePromptIfPresent();
+      fireEvent.click(screen.getByRole('button', { name: /how to play/i }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /start interactive tutorial/i })
+      );
+      fireEvent.click(screen.getByRole('button', { name: /exit tutorial/i }));
+
+      // Replay it — How to Play never gates on completion.
+      fireEvent.click(screen.getByRole('button', { name: /how to play/i }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /start interactive tutorial/i })
+      );
+
+      expect(screen.getByText('This is your side of the board.')).toBeTruthy();
     });
   });
 });

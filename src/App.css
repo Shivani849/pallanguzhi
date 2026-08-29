@@ -214,6 +214,135 @@
   transform: scale(0.97);
 }
 
+.mode-button--primary {
+  background: linear-gradient(180deg, var(--wood-light) 0%, var(--wood) 100%);
+  color: var(--cream);
+  border-color: transparent;
+}
+
+.mode-button--danger {
+  background: linear-gradient(180deg, #d9704f 0%, #b8503a 100%);
+  color: var(--cream);
+  border-color: transparent;
+}
+
+.welcome-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.game-over-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.back-to-home-link {
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--wood);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0.25rem;
+  touch-action: manipulation;
+}
+
+.how-to-play {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 480px;
+}
+
+.how-to-play-content {
+  width: 100%;
+  max-height: 55vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 0 0.25rem;
+  box-sizing: border-box;
+}
+
+.how-to-play-section h2 {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--wood-dark);
+}
+
+.how-to-play-section p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.tutorial-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(0.75rem, 3vh, 1.5rem);
+  width: 100%;
+}
+
+.tutorial-header {
+  position: absolute;
+  top: clamp(0.5rem, 2.5vh, 1rem);
+  left: clamp(0.5rem, 3vw, 1.25rem);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  z-index: 5;
+}
+
+.tutorial-step-count {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--wood);
+  opacity: 0.8;
+}
+
+.tutorial-exit {
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--wood-dark);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(201, 150, 44, 0.4);
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.tutorial-message-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  max-width: 420px;
+  padding: 1rem 1.5rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 2px 8px rgba(63, 36, 21, 0.15);
+}
+
+.tutorial-message {
+  margin: 0;
+  text-align: center;
+  font-size: 1rem;
+  color: var(--ink);
+}
+
 .history-card {
   max-width: 380px;
 }
@@ -497,6 +626,17 @@
 
 .pit:disabled {
   opacity: 0.85;
+}
+
+/* Tutorial-only: a calm "look here" ring, distinct from the selectable-pit
+   pulse (no animation, so it never gets mistaken for an invitation to
+   tap unless the pit is also genuinely selectable). */
+.pit--tutorial-highlight {
+  box-shadow:
+    inset 0 3px 6px rgba(63, 36, 21, 0.45),
+    inset 0 -2px 3px rgba(255, 255, 255, 0.35),
+    0 0 0 3px rgba(90, 140, 200, 0.65),
+    0 0 14px rgba(90, 140, 200, 0.5);
 }
 
 /* Currently being sown from (a persistent, subtle highlight) — a warm

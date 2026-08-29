@@ -5,6 +5,11 @@ interface GameOverOverlayProps {
   rightLabel: string;
   rightScore: number;
   onPlayAgain: () => void;
+  // Optional: the game has ended, so returning home never needs a
+  // confirmation dialog (see App.tsx's game-menu Back to Home, which does
+  // confirm — only while a game is still unfinished). Omitted in contexts
+  // that don't offer a way home from here (e.g. existing tests/usages).
+  onBackToHome?: () => void;
 }
 
 // Purely presentational — renders nothing while `title` is null (i.e. the
@@ -18,6 +23,7 @@ function GameOverOverlay({
   rightLabel,
   rightScore,
   onPlayAgain,
+  onBackToHome,
 }: GameOverOverlayProps) {
   if (!title) return null;
 
@@ -35,9 +41,20 @@ function GameOverOverlay({
             <span className="score-value">{rightScore}</span>
           </div>
         </div>
-        <button type="button" className="play-again" onClick={onPlayAgain}>
-          Play Again
-        </button>
+        <div className="game-over-actions">
+          <button type="button" className="play-again" onClick={onPlayAgain}>
+            Play Again
+          </button>
+          {onBackToHome && (
+            <button
+              type="button"
+              className="back-to-home-link"
+              onClick={onBackToHome}
+            >
+              Back to Home
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
