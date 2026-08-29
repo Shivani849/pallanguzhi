@@ -3,4 +3,6 @@ fileignoreconfig:
   checksum: 3551776a68ac5b2d70bfdca5ac6cb6b0d6dceb255de0ba73488843e52daa1d8f
 - filename: src/components/Board.tsx
   checksum: 5adc069a726f2cb4d8d5617a6f8297ad5694592e7e0567373f970f04b01d8379
+- filename: src/game/engine.ts
+  checksum: e26d1b6a2baed7a9a2e05aec5b65d147a261c63fc09072fcd24f6d249792c1ef
 version: "1.0"
