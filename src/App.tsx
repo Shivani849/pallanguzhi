@@ -1,12 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GameState } from './game/gameState';
 import { createInitialGameState, getValidMoves } from './game/gameState';
 import { makeMove } from './game/engine';
-import { chooseAIMove } from './game/ai/AIController';
 import { buildTimeline, computeFrameDelayMs } from './animation/timeline';
 import type { TimelineFrame } from './animation/timeline';
 import type { GameMode } from './gameMode';
-import { opponentOf, overlayTitle, sideLabel, turnStatusLabel } from './gameMode';
+import {
+  opponentOf,
+  overlayTitle,
+  sideLabel,
+  turnStatusLabel,
+} from './gameMode';
+import { createControllers, isHumanController } from './controllers/createControllers';
 import {
   isFeedbackEnabled,
   playCaptureSound,
@@ -25,8 +30,15 @@ import PassDeviceScreen from './components/PassDeviceScreen';
 import ModeSelectScreen from './components/ModeSelectScreen';
 import './App.css';
 
-const AI_THINKING_MIN_MS = 500;
-const AI_THINKING_MAX_MS = 1000;
+// Game Engine -> Game State -> Player Controller.
+//
+// This component owns the GameState and asks the game engine
+// (makeMove()/getValidMoves()) to compute everything about the rules.
+// It never decides who's allowed to move next on its own — it just asks
+// whichever PlayerController is assigned to `gameState.currentTurn` to
+// produce a move, and applies whatever comes back through the exact
+// same makeMove() pipeline regardless of whether that controller is a
+// HumanPlayerController or an AIPlayerController.
 
 function App() {
   const [mode, setMode] = useState<GameMode | null>(null);
@@ -48,6 +60,14 @@ function App() {
   // on the "pass the device" screen.
   const [awaitingPassDevice, setAwaitingPassDevice] = useState(false);
 
+  // One controller per seat ('player'/'ai'), assigned according to mode.
+  // Recreated only when the mode changes — a fresh pair for a fresh
+  // choice of vs-ai vs two-players.
+  const controllers = useMemo(
+    () => (mode ? createControllers(mode) : null),
+    [mode]
+  );
+
   // Pending setTimeout ids, so we can cancel them if the component
   // unmounts mid-animation.
   const timeoutIdsRef = useRef<number[]>([]);
@@ -61,11 +81,11 @@ function App() {
   }, []);
 
   // Executes pitId as a move from fromState via the game engine's own
-  // makeMove(), then plays the resulting steps back visually. Used for
-  // the player's clicks in both modes, and for the ai's chosen moves in
-  // vs-ai mode — there is only one place a move is ever applied. Sound
-  // feedback is layered on here too, purely reacting to what the engine
-  // already decided — none of it feeds back into gameplay.
+  // makeMove(), then plays the resulting steps back visually. Called via
+  // whichever controller produced pitId — human or ai — so there is only
+  // one place a move is ever applied. Sound feedback is layered on here
+  // too, purely reacting to what the engine already decided — none of it
+  // feeds back into gameplay.
   const applyMove = useCallback(
     (pitId: number, fromState: GameState) => {
       const result = makeMove(fromState, pitId);
@@ -151,11 +171,29 @@ function App() {
     [mode]
   );
 
-  // In vs-ai mode only the player's own pits are ever offered; in
-  // two-players mode, whichever side's turn it is gets offered, since
-  // both sides are a human sitting at this same device.
+  // Whenever it becomes someone's turn (and nothing is animating or
+  // blocking on the pass-device screen), ask that seat's controller to
+  // produce a move. For a HumanPlayerController this just arms it to
+  // accept the UI's next submitMove() call; for an AIPlayerController
+  // this kicks off its "thinking" timer. Either way, the same applyMove()
+  // runs once a pit id comes back — the engine never knows or cares
+  // which kind of controller supplied it.
+  useEffect(() => {
+    if (!mode || !controllers) return;
+    if (isAnimating || awaitingPassDevice) return;
+    if (gameState.status !== 'in-progress') return;
+
+    const controller = controllers[gameState.currentTurn];
+    controller.requestMove(gameState, {
+      onMoveChosen: (pitId) => applyMove(pitId, gameState),
+    });
+
+    return () => controller.cancelPendingMove();
+  }, [mode, controllers, gameState, isAnimating, awaitingPassDevice, applyMove]);
+
+  const currentController = mode && controllers ? controllers[gameState.currentTurn] : null;
   const isHumanTurnRightNow =
-    mode === 'two-players' || gameState.currentTurn === 'player';
+    currentController !== null && isHumanController(currentController);
 
   const validMoveIds = new Set(
     mode && !isAnimating && !awaitingPassDevice && isHumanTurnRightNow
@@ -164,59 +202,34 @@ function App() {
   );
 
   const handleSelectPit = (pitId: number) => {
-    if (!mode) return;
+    if (!mode || !controllers) return;
     if (isAnimating || awaitingPassDevice) return;
     if (gameState.status !== 'in-progress') return;
-    if (mode === 'vs-ai' && gameState.currentTurn !== 'player') return;
-    if (!validMoveIds.has(pitId)) return; // defense-in-depth; UI already disables these
 
-    playSelectSound();
-    hapticSelect();
-    applyMove(pitId, gameState);
+    const controller = controllers[gameState.currentTurn];
+    if (!isHumanController(controller)) return;
+
+    // The controller itself re-validates legality before accepting; only
+    // play tap feedback if the move was actually accepted.
+    const accepted = controller.submitMove(pitId);
+    if (accepted) {
+      playSelectSound();
+      hapticSelect();
+    }
   };
-
-  // Runs the ai's turn in vs-ai mode only: a short "thinking" delay
-  // (during which the UI already shows "AI's turn" and has all input
-  // disabled), then asks the AI controller for a move and applies it
-  // exactly like a player move. Never runs in two-players mode — there
-  // is no AI seat to act for.
-  useEffect(() => {
-    if (mode !== 'vs-ai') return;
-    if (isAnimating) return;
-    if (gameState.status !== 'in-progress') return;
-    if (gameState.currentTurn !== 'ai') return;
-
-    const thinkingDelayMs =
-      AI_THINKING_MIN_MS +
-      Math.random() * (AI_THINKING_MAX_MS - AI_THINKING_MIN_MS);
-
-    const timeoutId = window.setTimeout(() => {
-      const pitId = chooseAIMove(gameState);
-      applyMove(pitId, gameState);
-    }, thinkingDelayMs);
-    timeoutIdsRef.current.push(timeoutId);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-      // Whether this fired already (harmless no-op clear above) or got
-      // cancelled early, it can't fire again — drop it from the shared
-      // cleanup list so it doesn't accumulate for the life of the app.
-      timeoutIdsRef.current = timeoutIdsRef.current.filter(
-        (id) => id !== timeoutId
-      );
-    };
-  }, [mode, gameState, isAnimating, applyMove]);
 
   // Cancels anything pending and starts a completely fresh game, keeping
   // whichever mode is currently active.
   const startNewGame = useCallback(() => {
     timeoutIdsRef.current.forEach((id) => window.clearTimeout(id));
     timeoutIdsRef.current = [];
+    controllers?.player.cancelPendingMove();
+    controllers?.ai.cancelPendingMove();
     setIsAnimating(false);
     setAnimationFrame(null);
     setAwaitingPassDevice(false);
     setGameState(createInitialGameState());
-  }, []);
+  }, [controllers]);
 
   const handleSelectMode = (chosenMode: GameMode) => {
     setMode(chosenMode);
