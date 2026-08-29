@@ -92,8 +92,8 @@ describe('App', () => {
     const aiScore = Number(screen.getByText('AI').nextSibling?.textContent);
     expect(totalSeedsOnBoard() + playerScore + aiScore).toBe(TOTAL_SEEDS);
 
-    // Turn has switched away from the player (no AI implemented yet, so
-    // it simply now shows the ai's turn without anything acting on it).
+    // Turn has switched to the ai. Its own "thinking" timer hasn't fired
+    // yet (still pending in the fake-timer queue), so it hasn't moved.
     expect(screen.queryByText('Your turn')).toBeNull();
     expect(screen.getByText("AI's turn")).toBeTruthy();
 
@@ -107,5 +107,41 @@ describe('App', () => {
       expect(button.className).not.toContain('pit--active');
       expect(button.className).not.toContain('pit--landing');
     }
+  });
+
+  it('plays a full player → ai → player turn cycle', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('pit-7'));
+
+    // First flush: the player's move animation + commit. This turns it
+    // to the ai's turn, whose useEffect then schedules its own
+    // "thinking" timer — which only exists in the fake-timer queue once
+    // React has committed and run that effect, i.e. after this act()
+    // call returns. A single runAllTimers() call can't see it in advance.
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    // Second flush: the ai's thinking delay + its move animation + commit.
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(screen.getByText('Your turn')).toBeTruthy();
+    expect(screen.queryByText("AI's turn")).toBeNull();
+
+    // The player can act again — at least one of their pits is enabled.
+    const playerButtonsEnabled = [7, 8, 9, 10, 11, 12, 13].some(
+      (id) => !(screen.getByTestId(`pit-${id}`) as HTMLButtonElement).disabled
+    );
+    expect(playerButtonsEnabled).toBe(true);
+
+    // Total seeds still conserved after both moves.
+    const playerScore = Number(
+      screen.getByText('You').nextSibling?.textContent
+    );
+    const aiScore = Number(screen.getByText('AI').nextSibling?.textContent);
+    expect(totalSeedsOnBoard() + playerScore + aiScore).toBe(TOTAL_SEEDS);
   });
 });

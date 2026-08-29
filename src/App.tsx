@@ -1,11 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GameState } from './game/gameState';
 import { createInitialGameState, getValidMoves } from './game/gameState';
 import { makeMove } from './game/engine';
+import { chooseAIMove } from './game/ai/AIController';
 import { buildTimeline, computeFrameDelayMs } from './animation/timeline';
 import type { TimelineFrame } from './animation/timeline';
 import Board from './components/Board';
 import './App.css';
+
+const AI_THINKING_MIN_MS = 500;
+const AI_THINKING_MAX_MS = 1000;
 
 function statusLabel(state: GameState): string {
   switch (state.status) {
@@ -47,21 +51,13 @@ function App() {
     };
   }, []);
 
-  const validMoveIds = new Set(
-    !isAnimating && gameState.currentTurn === 'player'
-      ? getValidMoves(gameState).map((pit) => pit.id)
-      : []
-  );
-
-  const handleSelectPit = (pitId: number) => {
-    if (isAnimating || gameState.status !== 'in-progress') return;
-    if (!validMoveIds.has(pitId)) return; // defense-in-depth; UI already disables these
-
-    // The engine computes the entire move up front, independent of the
-    // animation — the UI only decides how to play back what already
-    // happened.
-    const result = makeMove(gameState, pitId);
-    const frames = buildTimeline(gameState.pits, result);
+  // Executes pitId as a move from fromState via the game engine's own
+  // makeMove(), then plays the resulting steps back visually. Used for
+  // both the player's clicks and the AI's chosen moves — there is only
+  // one place a move is ever applied.
+  const applyMove = useCallback((pitId: number, fromState: GameState) => {
+    const result = makeMove(fromState, pitId);
+    const frames = buildTimeline(fromState.pits, result);
 
     if (frames.length === 0) {
       setGameState(result.gameState);
@@ -86,7 +82,42 @@ function App() {
       setIsAnimating(false);
     }, finishDelayMs);
     timeoutIdsRef.current.push(finishTimeoutId);
+  }, []);
+
+  const validMoveIds = new Set(
+    !isAnimating && gameState.currentTurn === 'player'
+      ? getValidMoves(gameState).map((pit) => pit.id)
+      : []
+  );
+
+  const handleSelectPit = (pitId: number) => {
+    if (isAnimating || gameState.status !== 'in-progress') return;
+    if (gameState.currentTurn !== 'player') return;
+    if (!validMoveIds.has(pitId)) return; // defense-in-depth; UI already disables these
+
+    applyMove(pitId, gameState);
   };
+
+  // Runs the AI's turn: a short "thinking" delay (during which the UI
+  // already shows "AI's turn" and has all input disabled), then asks the
+  // AI controller for a move and applies it exactly like a player move.
+  useEffect(() => {
+    if (isAnimating) return;
+    if (gameState.status !== 'in-progress') return;
+    if (gameState.currentTurn !== 'ai') return;
+
+    const thinkingDelayMs =
+      AI_THINKING_MIN_MS +
+      Math.random() * (AI_THINKING_MAX_MS - AI_THINKING_MIN_MS);
+
+    const timeoutId = window.setTimeout(() => {
+      const pitId = chooseAIMove(gameState);
+      applyMove(pitId, gameState);
+    }, thinkingDelayMs);
+    timeoutIdsRef.current.push(timeoutId);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [gameState, isAnimating, applyMove]);
 
   const displayPits = animationFrame?.pits ?? gameState.pits;
 
