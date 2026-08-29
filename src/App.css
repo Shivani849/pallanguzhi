@@ -14,6 +14,43 @@
   text-align: center;
 }
 
+.scoreboard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 900px;
+}
+
+.score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 4rem;
+}
+
+.score-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b6b6b;
+}
+
+.score-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.turn-indicator {
+  font-size: 1.1rem;
+  font-weight: 600;
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  background: #eee0cf;
+  color: #5a341c;
+}
+
 .board {
   display: flex;
   flex-direction: column;
@@ -41,6 +78,22 @@
   background: #e8c9a0;
   border: 2px solid #5a341c;
   box-sizing: border-box;
+  font: inherit;
+  cursor: not-allowed;
+  padding: 0;
+}
+
+.pit[data-selectable='true'] {
+  cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(90, 52, 28, 0.35);
+}
+
+.pit[data-selectable='true']:hover {
+  filter: brightness(1.05);
+}
+
+.pit:disabled {
+  opacity: 0.7;
 }
 
 .pit-seeds {
