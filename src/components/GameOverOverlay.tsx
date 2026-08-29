@@ -1,36 +1,24 @@
-import type { GameStatus } from '../game/gameState';
-
 interface GameOverOverlayProps {
-  status: GameStatus;
-  playerScore: number;
-  aiScore: number;
+  title: string | null;
+  leftLabel: string;
+  leftScore: number;
+  rightLabel: string;
+  rightScore: number;
   onPlayAgain: () => void;
 }
 
-function resultTitle(status: GameStatus): string | null {
-  switch (status) {
-    case 'player-won':
-      return 'You Win!';
-    case 'ai-won':
-      return 'You Lose';
-    case 'draw':
-      return 'Draw';
-    case 'in-progress':
-    default:
-      return null;
-  }
-}
-
-// Purely presentational — renders nothing while the game is still in
-// progress; the engine (src/game/engine.ts) is the sole source of truth
-// for `status` and both final scores.
+// Purely presentational — renders nothing while `title` is null (i.e. the
+// game is still in progress). Callers decide the title text and score
+// labels, so this same component works for both vs-AI and two-player
+// modes without knowing anything about either.
 function GameOverOverlay({
-  status,
-  playerScore,
-  aiScore,
+  title,
+  leftLabel,
+  leftScore,
+  rightLabel,
+  rightScore,
   onPlayAgain,
 }: GameOverOverlayProps) {
-  const title = resultTitle(status);
   if (!title) return null;
 
   return (
@@ -39,12 +27,12 @@ function GameOverOverlay({
         <h2 className="game-over-title">{title}</h2>
         <div className="game-over-scores">
           <div className="game-over-score">
-            <span className="score-label">AI</span>
-            <span className="score-value">{aiScore}</span>
+            <span className="score-label">{leftLabel}</span>
+            <span className="score-value">{leftScore}</span>
           </div>
           <div className="game-over-score">
-            <span className="score-label">You</span>
-            <span className="score-value">{playerScore}</span>
+            <span className="score-label">{rightLabel}</span>
+            <span className="score-value">{rightScore}</span>
           </div>
         </div>
         <button type="button" className="play-again" onClick={onPlayAgain}>

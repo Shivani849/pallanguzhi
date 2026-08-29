@@ -8,9 +8,13 @@ fileignoreconfig:
 - filename: src/animation/timeline.test.ts
   checksum: a996a346d7046969282c35d93f583a2244db249579dc37df6ce6b17704da7811
 - filename: src/App.tsx
-  checksum: 64f6e46e991d8adb283e941838a8f45defa05de6c817747c1d7684e53b28d216
+  checksum: bc9c818509744739e6da0a8359c4d645b372a61a8878dfa5a1cab529040146e2
 - filename: src/audio/soundManager.test.ts
   checksum: 8732eca594f9dba861788cb070627366d68b73c5d5a28a9225aee9e4832da0ec
 - filename: src/audio/soundManager.ts
   checksum: e285f4ca013ebd3b3b2ff3c1eda56da966bd36d2ef41134ab4c540bc2055b1a9
+- filename: src/components/PassDeviceScreen.test.tsx
+  checksum: bd4d0a0c61db6b3abd5e0a4c4db36ef1985e5f518ad03bb7b5877efcaac19553
+- filename: src/App.test.tsx
+  checksum: eed53b8ff8c2ff447072119cba9df0651df34fb05b9e6ad634d0515e0089e58b
 version: "1.0"

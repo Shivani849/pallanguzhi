@@ -160,6 +160,55 @@
   transform: scale(0.96);
 }
 
+.pass-device-subtitle {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--wood);
+  text-align: center;
+}
+
+.mode-select {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+}
+
+.mode-select-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+  max-width: 280px;
+}
+
+.mode-button {
+  font: inherit;
+  font-weight: 600;
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+  padding: 0.9rem 1.75rem;
+  border: 1px solid rgba(201, 150, 44, 0.4);
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--cream) 0%, var(--cream-deep) 100%);
+  color: var(--wood-dark);
+  box-shadow: 0 2px 8px rgba(63, 36, 21, 0.18);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 100ms ease-out,
+    filter 100ms ease-out;
+}
+
+.mode-button:hover {
+  filter: brightness(1.05);
+}
+
+.mode-button:active {
+  transform: scale(0.97);
+}
+
 .app-title {
   margin: 0;
   font-family: var(--serif);
@@ -478,7 +527,8 @@
   .pit[data-selectable='true'],
   .game-over-overlay,
   .game-over-card,
-  .sound-toggle {
+  .sound-toggle,
+  .mode-button {
     animation: none !important;
     transition: none !important;
   }

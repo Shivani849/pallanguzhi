@@ -32,6 +32,20 @@ function flushAllTimersTwice() {
   });
 }
 
+// Mode selection is now the entry screen — most existing tests just want
+// straight to a vs-ai board, same as before that screen existed.
+function renderVsAI() {
+  const utils = render(<App />);
+  fireEvent.click(screen.getByRole('button', { name: /play vs ai/i }));
+  return utils;
+}
+
+function renderTwoPlayers() {
+  const utils = render(<App />);
+  fireEvent.click(screen.getByRole('button', { name: /two players/i }));
+  return utils;
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   setFeedbackEnabled(true);
@@ -44,7 +58,7 @@ afterEach(() => {
 
 describe('App', () => {
   it('shows the initial board with 0-0 score and the player to move', () => {
-    render(<App />);
+    renderVsAI();
 
     expect(screen.getByText('Your turn')).toBeTruthy();
     expect(pitButtons()).toHaveLength(14);
@@ -52,7 +66,7 @@ describe('App', () => {
   });
 
   it('only enables the player pits at the start (not the ai pits)', () => {
-    render(<App />);
+    renderVsAI();
 
     for (let id = 0; id <= 6; id++) {
       expect(
@@ -67,7 +81,7 @@ describe('App', () => {
   });
 
   it("clicking an invalid (ai) pit does nothing while it is the player's turn", () => {
-    render(<App />);
+    renderVsAI();
 
     fireEvent.click(screen.getByTestId('pit-0')); // an ai pit, disabled
 
@@ -77,7 +91,7 @@ describe('App', () => {
   });
 
   it('disables every pit immediately while the move animation is in progress', () => {
-    render(<App />);
+    renderVsAI();
 
     fireEvent.click(screen.getByTestId('pit-7'));
 
@@ -90,7 +104,7 @@ describe('App', () => {
   });
 
   it('animates seed distribution, then shows the final state and switches the turn', () => {
-    render(<App />);
+    renderVsAI();
 
     fireEvent.click(screen.getByTestId('pit-7'));
 
@@ -133,7 +147,7 @@ describe('App', () => {
   });
 
   it('plays a full player → ai → player turn cycle', () => {
-    render(<App />);
+    renderVsAI();
 
     fireEvent.click(screen.getByTestId('pit-7'));
 
@@ -169,12 +183,12 @@ describe('App', () => {
   });
 
   it('does not show the game-over overlay while the game is in progress', () => {
-    render(<App />);
+    renderVsAI();
     expect(screen.queryByTestId('game-over-overlay')).toBeNull();
   });
 
   it('the sound toggle reflects and updates the shared audio preference', () => {
-    render(<App />);
+    renderVsAI();
 
     const toggle = screen.getByRole('button', { name: /mute sound/i });
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
@@ -196,7 +210,7 @@ describe('App', () => {
   });
 
   it('plays a full game to completion, shows the result overlay with correct scores, and Play Again fully resets the game', () => {
-    render(<App />);
+    renderVsAI();
 
     const flush = () =>
       act(() => {
@@ -270,7 +284,7 @@ describe('App', () => {
 
   describe('QA: race conditions / double-clicks / rapid taps', () => {
     it('rapid double-click on the same pit only applies the move once', () => {
-      render(<App />);
+      renderVsAI();
       const pit = screen.getByTestId('pit-7');
 
       // Two clicks fired back-to-back, before any timer/render flush —
@@ -302,7 +316,7 @@ describe('App', () => {
     });
 
     it('rapid clicks across multiple different pits only apply the first', () => {
-      render(<App />);
+      renderVsAI();
 
       // Fire clicks on several different player pits synchronously, as
       // fast as possible, with no flush in between.
@@ -323,7 +337,7 @@ describe('App', () => {
     });
 
     it('clicking mid-animation (after timers have partially advanced) does nothing', () => {
-      render(<App />);
+      renderVsAI();
 
       fireEvent.click(screen.getByTestId('pit-7'));
 
@@ -347,7 +361,7 @@ describe('App', () => {
     });
 
     it('unmounting mid-animation does not throw or leave dangling timers that crash later', () => {
-      const { unmount } = render(<App />);
+      const { unmount } = renderVsAI();
 
       fireEvent.click(screen.getByTestId('pit-7'));
       // Unmount while frame timers and the finish timeout are still
@@ -365,6 +379,186 @@ describe('App', () => {
           vi.runAllTimers();
         });
       }).not.toThrow();
+    });
+  });
+
+  describe('mode selection', () => {
+    it('shows the mode-select screen first, with no board', () => {
+      render(<App />);
+
+      expect(
+        screen.getByRole('button', { name: /play vs ai/i })
+      ).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: /two players/i })
+      ).toBeTruthy();
+      expect(screen.queryByTestId('pit-0')).toBeNull();
+    });
+
+    it('choosing "Play vs AI" starts a fresh vs-ai game', () => {
+      renderVsAI();
+
+      expect(screen.getByText('Your turn')).toBeTruthy();
+      expect(screen.getByText('AI')).toBeTruthy();
+      expect(totalSeedsOnBoard()).toBe(TOTAL_SEEDS);
+    });
+
+    it('choosing "Two Players" starts a fresh two-player game', () => {
+      renderTwoPlayers();
+
+      expect(screen.getByText("Player 1's turn")).toBeTruthy();
+      expect(screen.getByText('Player 1')).toBeTruthy();
+      expect(screen.getByText('Player 2')).toBeTruthy();
+      expect(totalSeedsOnBoard()).toBe(TOTAL_SEEDS);
+    });
+  });
+
+  describe('two-players mode', () => {
+    it('only enables the current player\'s own pits, never the other player\'s', () => {
+      renderTwoPlayers();
+
+      // Player 1 (owner 'player', ids 7-13) moves first.
+      for (let id = 0; id <= 6; id++) {
+        expect(
+          (screen.getByTestId(`pit-${id}`) as HTMLButtonElement).disabled
+        ).toBe(true);
+      }
+      for (let id = 7; id <= 13; id++) {
+        expect(
+          (screen.getByTestId(`pit-${id}`) as HTMLButtonElement).disabled
+        ).toBe(false);
+      }
+    });
+
+    it('shows the pass-device screen after a move, blocking the board until Continue is tapped', () => {
+      renderTwoPlayers();
+
+      fireEvent.click(screen.getByTestId('pit-7'));
+      act(() => {
+        vi.runAllTimers();
+      });
+
+      // The move committed (turn switched to Player 2), but the
+      // pass-device screen should be up, blocking every pit.
+      expect(screen.getByTestId('pass-device-overlay')).toBeTruthy();
+      expect(screen.getByText(/Player 1.*Turn Complete/)).toBeTruthy();
+      expect(screen.getByText(/Pass the device to Player 2/)).toBeTruthy();
+      for (const button of pitButtons()) {
+        expect(button.disabled).toBe(true);
+      }
+
+      // Tapping Continue reveals the board for Player 2 — and no AI ever
+      // fires on its own in this mode.
+      fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+
+      expect(screen.queryByTestId('pass-device-overlay')).toBeNull();
+      expect(screen.getByText("Player 2's turn")).toBeTruthy();
+      // At least one of Player 2's own pits is selectable (some may
+      // legitimately be empty after the relay chain and stay disabled
+      // regardless of whose turn it is — same as in vs-ai mode).
+      const player2HasAMove = [0, 1, 2, 3, 4, 5, 6].some(
+        (id) => !(screen.getByTestId(`pit-${id}`) as HTMLButtonElement).disabled
+      );
+      expect(player2HasAMove).toBe(true);
+      // None of Player 1's own pits are selectable — it isn't their turn.
+      for (let id = 7; id <= 13; id++) {
+        expect(
+          (screen.getByTestId(`pit-${id}`) as HTMLButtonElement).disabled
+        ).toBe(true);
+      }
+
+      // Confirm nothing auto-plays: flushing timers changes nothing.
+      act(() => {
+        vi.runAllTimers();
+      });
+      expect(screen.getByText("Player 2's turn")).toBeTruthy();
+    });
+
+    it('plays a full player 1 -> pass -> player 2 -> pass cycle correctly', () => {
+      renderTwoPlayers();
+
+      fireEvent.click(screen.getByTestId('pit-7'));
+      act(() => {
+        vi.runAllTimers();
+      });
+      fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+
+      // Now Player 2's turn — find one of their enabled pits (ids 0-6)
+      // and play it.
+      const player2Pit = [0, 1, 2, 3, 4, 5, 6]
+        .map((id) => screen.getByTestId(`pit-${id}`) as HTMLButtonElement)
+        .find((button) => !button.disabled);
+      expect(player2Pit).toBeTruthy();
+
+      fireEvent.click(player2Pit!);
+      act(() => {
+        vi.runAllTimers();
+      });
+
+      expect(screen.getByTestId('pass-device-overlay')).toBeTruthy();
+      expect(screen.getByText(/Player 2.*Turn Complete/)).toBeTruthy();
+      expect(screen.getByText(/Pass the device to Player 1/)).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+      expect(screen.getByText("Player 1's turn")).toBeTruthy();
+
+      const playerScore = Number(
+        screen.getByText('Player 1').nextSibling?.textContent
+      );
+      const aiScore = Number(
+        screen.getByText('Player 2').nextSibling?.textContent
+      );
+      expect(totalSeedsOnBoard() + playerScore + aiScore).toBe(TOTAL_SEEDS);
+    });
+
+    it('plays a full two-player game to completion and Play Again stays in two-players mode', () => {
+      renderTwoPlayers();
+
+      const isGameOver = () =>
+        screen.queryByTestId('game-over-overlay') !== null;
+
+      let iterations = 0;
+      const MAX_ITERATIONS = 1000;
+
+      while (!isGameOver() && iterations < MAX_ITERATIONS) {
+        const passOverlay = screen.queryByTestId('pass-device-overlay');
+        if (passOverlay) {
+          fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+        }
+
+        const enabledPit = [...Array(14).keys()]
+          .map((id) => screen.getByTestId(`pit-${id}`) as HTMLButtonElement)
+          .find((button) => !button.disabled);
+
+        if (enabledPit) {
+          fireEvent.click(enabledPit);
+        }
+
+        act(() => {
+          vi.runAllTimers();
+        });
+        iterations++;
+      }
+
+      expect(isGameOver()).toBe(true);
+
+      const overlay = screen.getByTestId('game-over-overlay');
+      const resultTitle =
+        overlay.querySelector('.game-over-title')?.textContent;
+      expect(['Player 1 Wins!', 'Player 2 Wins!', 'Draw']).toContain(
+        resultTitle
+      );
+
+      // Play Again resets the board but stays in two-players mode — no
+      // return to the mode-select screen, and labels are still Player 1/2.
+      fireEvent.click(screen.getByRole('button', { name: /play again/i }));
+
+      expect(screen.queryByTestId('game-over-overlay')).toBeNull();
+      expect(screen.getByText("Player 1's turn")).toBeTruthy();
+      expect(totalSeedsOnBoard()).toBe(TOTAL_SEEDS);
+      expect(
+        screen.queryByRole('button', { name: /two players/i })
+      ).toBeNull();
     });
   });
 });
