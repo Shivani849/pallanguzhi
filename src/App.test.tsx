@@ -6,8 +6,8 @@ import { STARTING_SEEDS_PER_PIT } from './game/gameState';
 const TOTAL_SEEDS = STARTING_SEEDS_PER_PIT * 14;
 
 function totalSeedsOnBoard(): number {
-  return screen
-    .getAllByRole('button')
+  return [...Array(14).keys()]
+    .map((id) => screen.getByTestId(`pit-${id}`))
     .reduce((sum, button) => sum + Number(button.textContent), 0);
 }
 
@@ -143,5 +143,83 @@ describe('App', () => {
     );
     const aiScore = Number(screen.getByText('AI').nextSibling?.textContent);
     expect(totalSeedsOnBoard() + playerScore + aiScore).toBe(TOTAL_SEEDS);
+  });
+
+  it('does not show the game-over overlay while the game is in progress', () => {
+    render(<App />);
+    expect(screen.queryByTestId('game-over-overlay')).toBeNull();
+  });
+
+  it('plays a full game to completion, shows the result overlay with correct scores, and Play Again fully resets the game', () => {
+    render(<App />);
+
+    const flush = () =>
+      act(() => {
+        vi.runAllTimers();
+      });
+
+    const isGameOver = () => screen.queryByTestId('game-over-overlay') !== null;
+
+    let iterations = 0;
+    const MAX_ITERATIONS = 1000;
+
+    while (!isGameOver() && iterations < MAX_ITERATIONS) {
+      const enabledPlayerPit = [7, 8, 9, 10, 11, 12, 13]
+        .map((id) => screen.getByTestId(`pit-${id}`) as HTMLButtonElement)
+        .find((button) => !button.disabled);
+
+      if (enabledPlayerPit) {
+        fireEvent.click(enabledPlayerPit);
+      }
+
+      // Flush twice: once for the move just clicked (or the ai's move
+      // already in flight), once more in case that commit just scheduled
+      // the ai's own "thinking" timer (see the turn-cycle test above).
+      flush();
+      flush();
+      iterations++;
+    }
+
+    expect(isGameOver()).toBe(true);
+
+    const overlay = screen.getByTestId('game-over-overlay');
+    const resultTitle = overlay.querySelector('.game-over-title')?.textContent;
+    expect(['You Win!', 'You Lose', 'Draw']).toContain(resultTitle);
+
+    // The overlay's scores match the board's committed collected totals,
+    // and everything still adds up to the full seed count.
+    const overlayScores = Array.from(
+      overlay.querySelectorAll('.score-value')
+    ).map((el) => Number(el.textContent));
+    const [overlayAiScore, overlayPlayerScore] = overlayScores;
+    expect(totalSeedsOnBoard() + overlayPlayerScore + overlayAiScore).toBe(
+      TOTAL_SEEDS
+    );
+
+    // No pit should be clickable once the game is over.
+    for (let id = 0; id < 14; id++) {
+      expect(
+        (screen.getByTestId(`pit-${id}`) as HTMLButtonElement).disabled
+      ).toBe(true);
+    }
+
+    // Play Again resets everything back to the initial state.
+    fireEvent.click(screen.getByRole('button', { name: /play again/i }));
+
+    expect(screen.queryByTestId('game-over-overlay')).toBeNull();
+    expect(screen.getByText('Your turn')).toBeTruthy();
+    expect(totalSeedsOnBoard()).toBe(TOTAL_SEEDS);
+    expect(Number(screen.getByText('You').nextSibling?.textContent)).toBe(0);
+    expect(Number(screen.getByText('AI').nextSibling?.textContent)).toBe(0);
+    for (let id = 7; id <= 13; id++) {
+      expect(
+        (screen.getByTestId(`pit-${id}`) as HTMLButtonElement).disabled
+      ).toBe(false);
+    }
+
+    // No leftover animation state either: nothing further happens even
+    // after flushing timers again.
+    flush();
+    expect(screen.getByText('Your turn')).toBeTruthy();
   });
 });

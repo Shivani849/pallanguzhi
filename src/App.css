@@ -1,4 +1,5 @@
 .app {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -6,6 +7,65 @@
   padding: 2rem 1rem;
   min-height: 100vh;
   box-sizing: border-box;
+}
+
+.game-over-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 1rem;
+  box-sizing: border-box;
+  z-index: 10;
+}
+
+.game-over-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 2rem;
+  border-radius: 1rem;
+  background: #fdf6ec;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  max-width: 320px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.game-over-title {
+  margin: 0;
+  font-size: 1.75rem;
+  color: #3a2313;
+  text-align: center;
+}
+
+.game-over-scores {
+  display: flex;
+  gap: 2rem;
+}
+
+.game-over-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.play-again {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.6rem 1.5rem;
+  border: none;
+  border-radius: 999px;
+  background: #5a341c;
+  color: #fdf6ec;
+  cursor: pointer;
+}
+
+.play-again:hover {
+  filter: brightness(1.1);
 }
 
 .app-title {

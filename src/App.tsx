@@ -6,6 +6,7 @@ import { chooseAIMove } from './game/ai/AIController';
 import { buildTimeline, computeFrameDelayMs } from './animation/timeline';
 import type { TimelineFrame } from './animation/timeline';
 import Board from './components/Board';
+import GameOverOverlay from './components/GameOverOverlay';
 import './App.css';
 
 const AI_THINKING_MIN_MS = 500;
@@ -119,6 +120,15 @@ function App() {
     return () => window.clearTimeout(timeoutId);
   }, [gameState, isAnimating, applyMove]);
 
+  // Cancels anything pending and starts a completely fresh game.
+  const resetGame = useCallback(() => {
+    timeoutIdsRef.current.forEach((id) => window.clearTimeout(id));
+    timeoutIdsRef.current = [];
+    setIsAnimating(false);
+    setAnimationFrame(null);
+    setGameState(createInitialGameState());
+  }, []);
+
   const displayPits = animationFrame?.pits ?? gameState.pits;
 
   return (
@@ -145,6 +155,13 @@ function App() {
         activePitId={animationFrame?.activePitId ?? null}
         landingPitId={animationFrame?.landingPitId ?? null}
         capturedPitIds={new Set(animationFrame?.capturedPitIds ?? [])}
+      />
+
+      <GameOverOverlay
+        status={gameState.status}
+        playerScore={gameState.playerCollectedSeeds}
+        aiScore={gameState.aiCollectedSeeds}
+        onPlayAgain={resetGame}
       />
     </div>
   );
