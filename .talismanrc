@@ -8,7 +8,7 @@ fileignoreconfig:
 - filename: src/animation/timeline.test.ts
   checksum: a996a346d7046969282c35d93f583a2244db249579dc37df6ce6b17704da7811
 - filename: src/App.tsx
-  checksum: 91621b3b9fd56cb7b67521309373bc5a55b8ba79dea3f85cea405ead37c5b85d
+  checksum: 220d2b21022fb3c0273c6865eedb68259c440569c012beebe15ae2cd38b9eda3
 - filename: src/audio/soundManager.test.ts
   checksum: 8732eca594f9dba861788cb070627366d68b73c5d5a28a9225aee9e4832da0ec
 - filename: src/audio/soundManager.ts

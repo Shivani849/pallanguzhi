@@ -34,6 +34,7 @@ import PassDeviceScreen from './components/PassDeviceScreen';
 import ModeSelectScreen from './components/ModeSelectScreen';
 import ResumeGameScreen from './components/ResumeGameScreen';
 import HistoryScreen from './components/HistoryScreen';
+import StatisticsScreen from './components/StatisticsScreen';
 import './App.css';
 
 // Game Engine -> Game State -> Player Controller.
@@ -60,6 +61,7 @@ function App() {
     loadHistory()
   );
   const [historyVisible, setHistoryVisible] = useState(false);
+  const [statisticsVisible, setStatisticsVisible] = useState(false);
 
   const [mode, setMode] = useState<GameMode | null>(null);
   const [gameState, setGameState] = useState<GameState>(() =>
@@ -259,22 +261,30 @@ function App() {
       : []
   );
 
-  const handleSelectPit = (pitId: number) => {
-    if (!mode || !controllers) return;
-    if (isAnimating || awaitingPassDevice) return;
-    if (gameState.status !== 'in-progress') return;
+  // Wrapped in useCallback so this stays referentially stable across the
+  // repeated re-renders during a move's animation (gameState/isAnimating
+  // don't change frame-to-frame, only animationFrame does) — otherwise
+  // every Board/Pit down the tree would see a "new" onSelect prop each
+  // frame and React.memo on Pit (see Pit.tsx) couldn't skip anything.
+  const handleSelectPit = useCallback(
+    (pitId: number) => {
+      if (!mode || !controllers) return;
+      if (isAnimating || awaitingPassDevice) return;
+      if (gameState.status !== 'in-progress') return;
 
-    const controller = controllers[gameState.currentTurn];
-    if (!isHumanController(controller)) return;
+      const controller = controllers[gameState.currentTurn];
+      if (!isHumanController(controller)) return;
 
-    // The controller itself re-validates legality before accepting; only
-    // play tap feedback if the move was actually accepted.
-    const accepted = controller.submitMove(pitId);
-    if (accepted) {
-      playSelectSound();
-      hapticSelect();
-    }
-  };
+      // The controller itself re-validates legality before accepting;
+      // only play tap feedback if the move was actually accepted.
+      const accepted = controller.submitMove(pitId);
+      if (accepted) {
+        playSelectSound();
+        hapticSelect();
+      }
+    },
+    [mode, controllers, isAnimating, awaitingPassDevice, gameState]
+  );
 
   // Cancels anything pending and starts a completely fresh game, keeping
   // whichever mode is currently active.
@@ -327,6 +337,14 @@ function App() {
   return (
     <div className="app">
       <div className="top-controls">
+        <button
+          type="button"
+          className="icon-button"
+          onClick={() => setStatisticsVisible(true)}
+          aria-label="View statistics"
+        >
+          📊
+        </button>
         <button
           type="button"
           className="icon-button"
@@ -412,6 +430,12 @@ function App() {
         visible={historyVisible}
         entries={history}
         onClose={() => setHistoryVisible(false)}
+      />
+
+      <StatisticsScreen
+        visible={statisticsVisible}
+        history={history}
+        onClose={() => setStatisticsVisible(false)}
       />
     </div>
   );

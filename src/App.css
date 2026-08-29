@@ -247,6 +247,44 @@
   opacity: 0.75;
 }
 
+.stats-card {
+  max-width: 340px;
+  align-items: stretch;
+}
+
+.stats-section {
+  width: 100%;
+}
+
+.stats-section-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--wood);
+  text-align: center;
+}
+
+.stats-grid {
+  margin: 0 0 0.5rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.35rem 0.75rem;
+  font-size: 0.9rem;
+  color: var(--wood-dark);
+}
+
+.stats-grid dt {
+  color: var(--wood);
+}
+
+.stats-grid dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+}
+
 .app-title {
   margin: 0;
   font-family: var(--serif);

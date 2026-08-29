@@ -90,6 +90,47 @@ describe('buildTimeline', () => {
 
     expect(pitsBeforeMove).toEqual(snapshot);
   });
+
+  it('reuses the same pit object reference across frames when a pit is untouched (perf: lets React.memo skip re-rendering it)', () => {
+    const pitsBeforeMove = makePits({
+      7: 3,
+      8: 0,
+      9: 0,
+      10: 0,
+      11: 5, // never touched by this move at all
+    });
+
+    const frames = buildTimeline(pitsBeforeMove, {
+      steps: [{ sourcePitId: 7, seedsSown: 3, dropPitIds: [8, 9, 10] }],
+      capture: null,
+    });
+
+    const untouchedPitAcrossFrames = frames.map(
+      (frame) => frame.pits.find((p) => p.id === 11)!
+    );
+    // Every frame's reference to the untouched pit 11 is the exact same
+    // object — not just equal in value.
+    for (const pit of untouchedPitAcrossFrames) {
+      expect(pit).toBe(untouchedPitAcrossFrames[0]);
+    }
+  });
+
+  it('gives a pit a new object reference only on the frame where its seed count actually changes', () => {
+    const pitsBeforeMove = makePits({ 7: 1, 8: 0 });
+
+    const frames = buildTimeline(pitsBeforeMove, {
+      steps: [{ sourcePitId: 7, seedsSown: 1, dropPitIds: [8] }],
+      capture: null,
+    });
+
+    // frame 0: pit 7 emptied (0 -> new object); pit 8 still untouched.
+    // frame 1: pit 8 gets its seed (0 -> 1, new object).
+    const pit8Frame0 = frames[0].pits.find((p) => p.id === 8)!;
+    const pit8Frame1 = frames[1].pits.find((p) => p.id === 8)!;
+    expect(pit8Frame0.seeds).toBe(0);
+    expect(pit8Frame1.seeds).toBe(1);
+    expect(pit8Frame0).not.toBe(pit8Frame1);
+  });
 });
 
 describe('computeFrameDelayMs', () => {

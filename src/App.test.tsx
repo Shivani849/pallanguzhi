@@ -679,4 +679,50 @@ describe('App', () => {
       expect(screen.getAllByRole('listitem')).toHaveLength(1);
     });
   });
+
+  describe('statistics screen', () => {
+    it('shows all-zero stats with no history', () => {
+      render(<App />);
+
+      fireEvent.click(screen.getByRole('button', { name: /statistics/i }));
+
+      expect(screen.getByRole('heading', { name: 'vs AI' })).toBeTruthy();
+      expect(
+        screen.getByRole('heading', { name: 'Two Players' })
+      ).toBeTruthy();
+      expect(screen.getByText('0%')).toBeTruthy();
+    });
+
+    it('reflects a completed vs-ai game in the vs-ai stats', () => {
+      renderVsAI();
+
+      const isGameOver = () =>
+        screen.queryByTestId('game-over-overlay') !== null;
+      let iterations = 0;
+      while (!isGameOver() && iterations < 1000) {
+        const enabledPit = pitButtons().find((b) => !b.disabled);
+        if (enabledPit) fireEvent.click(enabledPit);
+        flushAllTimersTwice();
+        iterations++;
+      }
+      expect(isGameOver()).toBe(true);
+
+      fireEvent.click(screen.getByRole('button', { name: /statistics/i }));
+
+      const values = screen
+        .getAllByRole('definition')
+        .map((el) => el.textContent);
+      // Exactly one vs-ai game played, so "games played" (1) must appear.
+      expect(values).toContain('1');
+    });
+
+    it('closes when Close is clicked', () => {
+      render(<App />);
+      fireEvent.click(screen.getByRole('button', { name: /statistics/i }));
+      expect(screen.getByTestId('statistics-overlay')).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: /close/i }));
+      expect(screen.queryByTestId('statistics-overlay')).toBeNull();
+    });
+  });
 });
