@@ -8,7 +8,7 @@ describe('Board', () => {
     const state = createInitialGameState();
     render(
       <Board
-        state={state}
+        pits={state.pits}
         validMoveIds={new Set()}
         onSelectPit={() => {}}
         disabled={false}
@@ -22,7 +22,7 @@ describe('Board', () => {
     const state = createInitialGameState();
     render(
       <Board
-        state={state}
+        pits={state.pits}
         validMoveIds={new Set([7, 8])}
         onSelectPit={() => {}}
         disabled={false}
@@ -45,7 +45,7 @@ describe('Board', () => {
     const onSelectPit = vi.fn();
     render(
       <Board
-        state={state}
+        pits={state.pits}
         validMoveIds={new Set([7])}
         onSelectPit={onSelectPit}
         disabled={false}
@@ -61,7 +61,7 @@ describe('Board', () => {
     const state = createInitialGameState();
     render(
       <Board
-        state={state}
+        pits={state.pits}
         validMoveIds={new Set([7])}
         onSelectPit={() => {}}
         disabled
@@ -70,5 +70,28 @@ describe('Board', () => {
 
     const button = screen.getByTestId('pit-7') as HTMLButtonElement;
     expect(button.disabled).toBe(true);
+  });
+
+  it('marks the active, landing, and captured pits with the right highlight classes', () => {
+    const state = createInitialGameState();
+    render(
+      <Board
+        pits={state.pits}
+        validMoveIds={new Set()}
+        onSelectPit={() => {}}
+        disabled={false}
+        activePitId={7}
+        landingPitId={8}
+        capturedPitIds={new Set([9, 10])}
+      />
+    );
+
+    expect(screen.getByTestId('pit-7').className).toContain('pit--active');
+    expect(screen.getByTestId('pit-8').className).toContain('pit--landing');
+    expect(screen.getByTestId('pit-9').className).toContain('pit--captured');
+    expect(screen.getByTestId('pit-10').className).toContain(
+      'pit--captured'
+    );
+    expect(screen.getByTestId('pit-11').className).not.toContain('pit--');
   });
 });

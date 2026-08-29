@@ -4,21 +4,37 @@ interface PitProps {
   pit: PitData;
   selectable: boolean;
   onSelect?: (pitId: number) => void;
+  active?: boolean; // this pit is currently being sown from
+  landing?: boolean; // a seed just landed here
+  captured?: boolean; // this pit was just cleared by a capture
 }
 
-// Purely presentational — rendering and click reporting only. Whether a
-// pit is selectable is decided by the caller (App), based on game state;
-// this component just enforces it via the native `disabled` attribute.
-function Pit({ pit, selectable, onSelect }: PitProps) {
+// Purely presentational — rendering, click reporting, and highlight
+// classes only. Whether a pit is selectable/active/landing/captured is
+// all decided by the caller based on game state and animation timing;
+// this component just reflects it.
+function Pit({
+  pit,
+  selectable,
+  onSelect,
+  active = false,
+  landing = false,
+  captured = false,
+}: PitProps) {
   const handleClick = () => {
     if (!selectable) return;
     onSelect?.(pit.id);
   };
 
+  const classNames = ['pit'];
+  if (active) classNames.push('pit--active');
+  if (landing) classNames.push('pit--landing');
+  if (captured) classNames.push('pit--captured');
+
   return (
     <button
       type="button"
-      className="pit"
+      className={classNames.join(' ')}
       data-testid={`pit-${pit.id}`}
       data-owner={pit.owner}
       data-index={pit.index}

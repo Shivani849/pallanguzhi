@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GameState } from './game/gameState';
 import { createInitialGameState, getValidMoves } from './game/gameState';
 import { makeMove } from './game/engine';
+import { buildTimeline, computeFrameDelayMs } from './animation/timeline';
+import type { TimelineFrame } from './animation/timeline';
 import Board from './components/Board';
 import './App.css';
 
@@ -23,29 +25,70 @@ function App() {
   const [gameState, setGameState] = useState<GameState>(() =>
     createInitialGameState()
   );
-  // Guards against re-entrant clicks while a move is being applied. The
-  // engine is synchronous today (no animation yet), but this is the seam
-  // later phases (animation, AI "thinking" delay) will hook into.
-  const [isProcessing, setIsProcessing] = useState(false);
+  // True for the entire duration of a move's playback, set synchronously
+  // the instant a move starts so input is blocked immediately — not just
+  // once the first animation frame timer fires.
+  const [isAnimating, setIsAnimating] = useState(false);
+  // The current visual snapshot to render while animating; null once the
+  // move commits (or before the first frame's timer has fired yet).
+  const [animationFrame, setAnimationFrame] = useState<TimelineFrame | null>(
+    null
+  );
 
-  // Only the player's own pits are ever clickable from this UI — with no
-  // AI implemented yet, the ai's "valid moves" simply aren't offered as
-  // something the human can click on its behalf.
+  // Pending setTimeout ids, so we can cancel them if the component
+  // unmounts mid-animation.
+  const timeoutIdsRef = useRef<number[]>([]);
+  useEffect(() => {
+    // Same array instance for the component's whole lifetime — later
+    // pushes onto it are still visible through this captured reference.
+    const pendingTimeoutIds = timeoutIdsRef.current;
+    return () => {
+      pendingTimeoutIds.forEach((id) => window.clearTimeout(id));
+    };
+  }, []);
+
   const validMoveIds = new Set(
-    gameState.currentTurn === 'player'
+    !isAnimating && gameState.currentTurn === 'player'
       ? getValidMoves(gameState).map((pit) => pit.id)
       : []
   );
 
   const handleSelectPit = (pitId: number) => {
-    if (isProcessing || gameState.status !== 'in-progress') return;
+    if (isAnimating || gameState.status !== 'in-progress') return;
     if (!validMoveIds.has(pitId)) return; // defense-in-depth; UI already disables these
 
-    setIsProcessing(true);
+    // The engine computes the entire move up front, independent of the
+    // animation — the UI only decides how to play back what already
+    // happened.
     const result = makeMove(gameState, pitId);
-    setGameState(result.gameState);
-    setIsProcessing(false);
+    const frames = buildTimeline(gameState.pits, result);
+
+    if (frames.length === 0) {
+      setGameState(result.gameState);
+      return;
+    }
+
+    setIsAnimating(true);
+
+    const delayMs = computeFrameDelayMs(frames.length);
+
+    frames.forEach((frame, index) => {
+      const timeoutId = window.setTimeout(() => {
+        setAnimationFrame(frame);
+      }, delayMs * index);
+      timeoutIdsRef.current.push(timeoutId);
+    });
+
+    const finishDelayMs = delayMs * frames.length + 150; // brief pause on the last frame
+    const finishTimeoutId = window.setTimeout(() => {
+      setGameState(result.gameState);
+      setAnimationFrame(null);
+      setIsAnimating(false);
+    }, finishDelayMs);
+    timeoutIdsRef.current.push(finishTimeoutId);
   };
+
+  const displayPits = animationFrame?.pits ?? gameState.pits;
 
   return (
     <div className="app">
@@ -64,10 +107,13 @@ function App() {
       </div>
 
       <Board
-        state={gameState}
+        pits={displayPits}
         validMoveIds={validMoveIds}
         onSelectPit={handleSelectPit}
-        disabled={isProcessing}
+        disabled={isAnimating}
+        activePitId={animationFrame?.activePitId ?? null}
+        landingPitId={animationFrame?.landingPitId ?? null}
+        capturedPitIds={new Set(animationFrame?.capturedPitIds ?? [])}
       />
     </div>
   );

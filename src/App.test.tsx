@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import App from './App';
 import { STARTING_SEEDS_PER_PIT } from './game/gameState';
 
@@ -10,6 +10,14 @@ function totalSeedsOnBoard(): number {
     .getAllByRole('button')
     .reduce((sum, button) => sum + Number(button.textContent), 0);
 }
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('App', () => {
   it('shows the initial board with 0-0 score and the player to move', () => {
@@ -24,18 +32,18 @@ describe('App', () => {
     render(<App />);
 
     for (let id = 0; id <= 6; id++) {
-      expect((screen.getByTestId(`pit-${id}`) as HTMLButtonElement).disabled).toBe(
-        true
-      );
+      expect(
+        (screen.getByTestId(`pit-${id}`) as HTMLButtonElement).disabled
+      ).toBe(true);
     }
     for (let id = 7; id <= 13; id++) {
-      expect((screen.getByTestId(`pit-${id}`) as HTMLButtonElement).disabled).toBe(
-        false
-      );
+      expect(
+        (screen.getByTestId(`pit-${id}`) as HTMLButtonElement).disabled
+      ).toBe(false);
     }
   });
 
-  it('clicking an invalid (ai) pit does nothing while it is the player\'s turn', () => {
+  it("clicking an invalid (ai) pit does nothing while it is the player's turn", () => {
     render(<App />);
 
     fireEvent.click(screen.getByTestId('pit-0')); // an ai pit, disabled
@@ -45,10 +53,28 @@ describe('App', () => {
     expect(totalSeedsOnBoard()).toBe(TOTAL_SEEDS);
   });
 
-  it('clicking a valid player pit distributes seeds, updates the board, and switches the turn', () => {
+  it('disables every pit immediately while the move animation is in progress', () => {
     render(<App />);
 
     fireEvent.click(screen.getByTestId('pit-7'));
+
+    // Animation is running (timers haven't been flushed yet) — nothing
+    // should be clickable, and the committed game state hasn't changed.
+    for (const button of screen.getAllByRole('button') as HTMLButtonElement[]) {
+      expect(button.disabled).toBe(true);
+    }
+    expect(screen.getByText('Your turn')).toBeTruthy();
+  });
+
+  it('animates seed distribution, then shows the final state and switches the turn', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('pit-7'));
+
+    // Flush every scheduled animation frame + the final commit.
+    act(() => {
+      vi.runAllTimers();
+    });
 
     // The board must have changed from the initial all-6s state — some
     // relay chain of sowing happened. (With a fully-loaded initial board,
@@ -74,6 +100,12 @@ describe('App', () => {
     // No pit should be clickable now, since it isn't the player's turn.
     for (const button of screen.getAllByRole('button') as HTMLButtonElement[]) {
       expect(button.disabled).toBe(true);
+    }
+
+    // Animation highlight classes are gone once a move has fully committed.
+    for (const button of screen.getAllByRole('button')) {
+      expect(button.className).not.toContain('pit--active');
+      expect(button.className).not.toContain('pit--landing');
     }
   });
 });

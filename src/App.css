@@ -96,6 +96,42 @@
   opacity: 0.7;
 }
 
+/* Currently being sown from (a persistent, subtle highlight). */
+.pit--active {
+  box-shadow: 0 0 0 3px rgba(230, 160, 60, 0.85);
+}
+
+/* A seed just landed here — brief pop. */
+.pit--landing {
+  animation: pit-pop 220ms ease-out;
+}
+
+/* Cleared by a capture — brief flash. */
+.pit--captured {
+  animation: pit-capture-flash 320ms ease-out;
+}
+
+@keyframes pit-pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes pit-capture-flash {
+  0% {
+    background: #f4d35e;
+  }
+  100% {
+    background: inherit;
+  }
+}
+
 .pit-seeds {
   font-size: 1.25rem;
   font-weight: 600;

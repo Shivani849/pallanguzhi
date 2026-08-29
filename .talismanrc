@@ -2,7 +2,9 @@ fileignoreconfig:
 - filename: package-lock.json
   checksum: d7c00f3f211f3359e418277c4fb982e6f355e6299a65fe8b8bae688a05abeaa9
 - filename: src/components/Board.tsx
-  checksum: 33d1ec2ac224d51ba22245061523dfdb0d3c3a68fa4c103d2432b9e1b9900d4f
+  checksum: f407675b1faa7694149b1adfe25a65896d60a43add58c3598fa55f7e3077d3ab
 - filename: src/game/engine.ts
   checksum: e26d1b6a2baed7a9a2e05aec5b65d147a261c63fc09072fcd24f6d249792c1ef
+- filename: src/animation/timeline.test.ts
+  checksum: a996a346d7046969282c35d93f583a2244db249579dc37df6ce6b17704da7811
 version: "1.0"
