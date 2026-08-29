@@ -16,12 +16,7 @@ import {
   playWinSound,
   toggleFeedbackEnabled,
 } from './audio/soundManager';
-import {
-  hapticCapture,
-  hapticLose,
-  hapticSelect,
-  hapticWin,
-} from './audio/haptics';
+import { hapticSelect } from './audio/haptics';
 import Board from './components/Board';
 import GameOverOverlay from './components/GameOverOverlay';
 import './App.css';
@@ -80,14 +75,15 @@ function App() {
     const result = makeMove(fromState, pitId);
     const frames = buildTimeline(fromState.pits, result);
 
+    // Sound only, deliberately no haptics here — this always fires from a
+    // setTimeout, and browsers require navigator.vibrate() to be called
+    // synchronously within a real gesture's call stack (see haptics.ts).
     const playEndOfMoveFeedback = () => {
       if (result.gameOver) {
         if (result.status === 'player-won') {
           playWinSound();
-          hapticWin();
         } else if (result.status === 'ai-won') {
           playLoseSound();
-          hapticLose();
         } else if (result.status === 'draw') {
           playDrawSound();
         }
@@ -106,20 +102,27 @@ function App() {
 
     const delayMs = computeFrameDelayMs(frames.length);
 
+    // Tracked separately from the shared ref so this move's own ids can
+    // be pruned back out once they've all fired — otherwise
+    // timeoutIdsRef would grow for as long as the app stays open, one
+    // entry per frame of every move ever played (harmless numbers, but
+    // needless growth over a long session).
+    const ownTimeoutIds: number[] = [];
+
     frames.forEach((frame, index) => {
       const timeoutId = window.setTimeout(() => {
         setAnimationFrame(frame);
         // Per-seed feedback: a soft tick for an ordinary landing, a
         // richer chime for a capture. playSeedTick() throttles itself so
         // a long relay chain doesn't turn into a machine-gun clatter.
+        // Sound only — no haptic here, see haptics.ts for why.
         if (frame.capturedPitIds.length > 0) {
           playCaptureSound();
-          hapticCapture();
         } else if (frame.landingPitId !== null) {
           playSeedTick();
         }
       }, delayMs * index);
-      timeoutIdsRef.current.push(timeoutId);
+      ownTimeoutIds.push(timeoutId);
     });
 
     const finishDelayMs = delayMs * frames.length + 150; // brief pause on the last frame
@@ -128,8 +131,16 @@ function App() {
       setAnimationFrame(null);
       setIsAnimating(false);
       playEndOfMoveFeedback();
+      // This move is fully done — its ids can never fire again, so drop
+      // them from the shared cleanup list.
+      const spent = new Set(ownTimeoutIds);
+      timeoutIdsRef.current = timeoutIdsRef.current.filter(
+        (id) => !spent.has(id)
+      );
     }, finishDelayMs);
-    timeoutIdsRef.current.push(finishTimeoutId);
+    ownTimeoutIds.push(finishTimeoutId);
+
+    timeoutIdsRef.current.push(...ownTimeoutIds);
   }, []);
 
   const validMoveIds = new Set(
@@ -166,7 +177,15 @@ function App() {
     }, thinkingDelayMs);
     timeoutIdsRef.current.push(timeoutId);
 
-    return () => window.clearTimeout(timeoutId);
+    return () => {
+      window.clearTimeout(timeoutId);
+      // Whether this fired already (harmless no-op clear above) or got
+      // cancelled early, it can't fire again — drop it from the shared
+      // cleanup list so it doesn't accumulate for the life of the app.
+      timeoutIdsRef.current = timeoutIdsRef.current.filter(
+        (id) => id !== timeoutId
+      );
+    };
   }, [gameState, isAnimating, applyMove]);
 
   // Cancels anything pending and starts a completely fresh game.

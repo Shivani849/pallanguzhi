@@ -19,6 +19,19 @@ function totalSeedsOnBoard(): number {
   );
 }
 
+// Flushes twice: a move's own animation timers might, on commit, cause a
+// dependent effect (the ai's "thinking" timer) to schedule a *new* timer
+// that didn't exist in the fake-timer queue until this act() call was
+// already underway — a single runAllTimers() can't see it in advance.
+function flushAllTimersTwice() {
+  act(() => {
+    vi.runAllTimers();
+  });
+  act(() => {
+    vi.runAllTimers();
+  });
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   setFeedbackEnabled(true);
@@ -253,5 +266,105 @@ describe('App', () => {
     // after flushing timers again.
     flush();
     expect(screen.getByText('Your turn')).toBeTruthy();
+  });
+
+  describe('QA: race conditions / double-clicks / rapid taps', () => {
+    it('rapid double-click on the same pit only applies the move once', () => {
+      render(<App />);
+      const pit = screen.getByTestId('pit-7');
+
+      // Two clicks fired back-to-back, before any timer/render flush —
+      // the second must be a no-op since the button becomes disabled
+      // synchronously as part of handling the first.
+      fireEvent.click(pit);
+      fireEvent.click(pit);
+
+      flushAllTimersTwice();
+
+      // If the move had been double-applied, the total captured seeds
+      // would exceed what a single move from a fresh board can produce,
+      // and/or the board would show impossible negative-consumption
+      // artifacts. The one invariant that must always hold regardless of
+      // how many times a move was (mistakenly) applied is conservation:
+      const playerScore = Number(
+        screen.getByText('You').nextSibling?.textContent
+      );
+      const aiScore = Number(screen.getByText('AI').nextSibling?.textContent);
+      expect(totalSeedsOnBoard() + playerScore + aiScore).toBe(TOTAL_SEEDS);
+
+      // More precisely: exactly one player move followed by exactly one
+      // ai response switches the turn back to the player. If the second
+      // click had also gone through as a *second* player move, the turn
+      // would still show "AI's turn" (two player moves with no ai move
+      // in between never happens — turn strictly alternates) or the game
+      // would be further along than a single round-trip allows.
+      expect(screen.getByText('Your turn')).toBeTruthy();
+    });
+
+    it('rapid clicks across multiple different pits only apply the first', () => {
+      render(<App />);
+
+      // Fire clicks on several different player pits synchronously, as
+      // fast as possible, with no flush in between.
+      fireEvent.click(screen.getByTestId('pit-7'));
+      fireEvent.click(screen.getByTestId('pit-8'));
+      fireEvent.click(screen.getByTestId('pit-9'));
+      fireEvent.click(screen.getByTestId('pit-10'));
+
+      flushAllTimersTwice();
+
+      const playerScore = Number(
+        screen.getByText('You').nextSibling?.textContent
+      );
+      const aiScore = Number(screen.getByText('AI').nextSibling?.textContent);
+      expect(totalSeedsOnBoard() + playerScore + aiScore).toBe(TOTAL_SEEDS);
+      // Exactly one player+ai round-trip happened, same reasoning as above.
+      expect(screen.getByText('Your turn')).toBeTruthy();
+    });
+
+    it('clicking mid-animation (after timers have partially advanced) does nothing', () => {
+      render(<App />);
+
+      fireEvent.click(screen.getByTestId('pit-7'));
+
+      // Advance partway through the animation, then try to click again —
+      // every pit should still be disabled at this point.
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      for (const button of pitButtons()) {
+        fireEvent.click(button);
+      }
+
+      flushAllTimersTwice();
+
+      const playerScore = Number(
+        screen.getByText('You').nextSibling?.textContent
+      );
+      const aiScore = Number(screen.getByText('AI').nextSibling?.textContent);
+      expect(totalSeedsOnBoard() + playerScore + aiScore).toBe(TOTAL_SEEDS);
+      expect(screen.getByText('Your turn')).toBeTruthy();
+    });
+
+    it('unmounting mid-animation does not throw or leave dangling timers that crash later', () => {
+      const { unmount } = render(<App />);
+
+      fireEvent.click(screen.getByTestId('pit-7'));
+      // Unmount while frame timers and the finish timeout are still
+      // pending in the queue.
+      expect(() => unmount()).not.toThrow();
+
+      // Any timers that were scheduled before unmount are still in
+      // vitest's fake-timer queue (React unmounting a component doesn't
+      // reach into an external timer queue to cancel entries by itself —
+      // that's exactly why App's own cleanup effect calls clearTimeout on
+      // all of them). Running them now, after unmount, must not throw
+      // (i.e. the cleanup effect really did cancel them).
+      expect(() => {
+        act(() => {
+          vi.runAllTimers();
+        });
+      }).not.toThrow();
+    });
   });
 });
