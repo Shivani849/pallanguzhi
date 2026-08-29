@@ -1,6 +1,21 @@
 :root {
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  color-scheme: light dark;
+  --serif: Georgia, 'Noto Serif', 'Times New Roman', serif;
+
+  /* Warm wood/heritage palette, reused across App.css. */
+  --wood-dark: #3f2415;
+  --wood: #6b3f22;
+  --wood-light: #8a5a34;
+  --cream: #fdf6ec;
+  --cream-deep: #f0e2c8;
+  --gold: #c9962c;
+  --gold-light: #e6c66b;
+  --maroon: #7a2331;
+  --ink: #3a2313;
+
+  /* The game has one fixed, deliberately warm/light look — don't let a
+     dark-mode OS preference swap in a clashing default background. */
+  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -21,6 +36,13 @@ body {
 
 body {
   font-family: var(--sans);
+  background: radial-gradient(
+    ellipse at 50% 0%,
+    var(--cream) 0%,
+    var(--cream-deep) 60%,
+    #e6d3a8 100%
+  );
+  min-height: 100svh;
 }
 
 #root {
