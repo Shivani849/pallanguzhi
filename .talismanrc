@@ -7,4 +7,6 @@ fileignoreconfig:
   checksum: e26d1b6a2baed7a9a2e05aec5b65d147a261c63fc09072fcd24f6d249792c1ef
 - filename: src/animation/timeline.test.ts
   checksum: a996a346d7046969282c35d93f583a2244db249579dc37df6ce6b17704da7811
+- filename: src/App.tsx
+  checksum: 64f6e46e991d8adb283e941838a8f45defa05de6c817747c1d7684e53b28d216
 version: "1.0"

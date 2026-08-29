@@ -140,7 +140,14 @@ function App() {
           <span className="score-label">AI</span>
           <span className="score-value">{gameState.aiCollectedSeeds}</span>
         </div>
-        <div className="turn-indicator">{statusLabel(gameState)}</div>
+        {/* Keyed by turn/status so it remounts (and replays its CSS
+            transition) every time the turn or result actually changes. */}
+        <div
+          key={`${gameState.currentTurn}-${gameState.status}`}
+          className="turn-indicator"
+        >
+          {statusLabel(gameState)}
+        </div>
         <div className="score score--player">
           <span className="score-label">You</span>
           <span className="score-value">{gameState.playerCollectedSeeds}</span>

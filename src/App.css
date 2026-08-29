@@ -3,10 +3,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2rem;
-  padding: 2rem 1rem;
-  min-height: 100vh;
+  justify-content: center;
+  gap: clamp(1rem, 4vh, 2rem);
+  padding: clamp(0.75rem, 3vh, 2rem) clamp(0.35rem, 1.5vw, 1rem);
+  min-height: 100svh;
   box-sizing: border-box;
+  /* No page-level scrolling — the board is sized to always fit. */
+  overflow: hidden;
 }
 
 .game-over-overlay {
@@ -62,15 +65,20 @@
   background: #5a341c;
   color: #fdf6ec;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .play-again:hover {
   filter: brightness(1.1);
 }
 
+.play-again:active {
+  transform: scale(0.96);
+}
+
 .app-title {
   margin: 0;
-  font-size: 1.75rem;
+  font-size: clamp(1.25rem, 5vw, 1.75rem);
   text-align: center;
 }
 
@@ -78,7 +86,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1.5rem;
+  gap: clamp(0.75rem, 4vw, 1.5rem);
   width: 100%;
   max-width: 900px;
 }
@@ -103,21 +111,34 @@
 }
 
 .turn-indicator {
-  font-size: 1.1rem;
+  font-size: clamp(0.95rem, 3.5vw, 1.1rem);
   font-weight: 600;
   padding: 0.4rem 1rem;
   border-radius: 999px;
   background: #eee0cf;
   color: #5a341c;
+  white-space: nowrap;
+  animation: turn-indicator-in 260ms ease-out;
+}
+
+@keyframes turn-indicator-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .board {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: clamp(0.5rem, 2.5vh, 1.5rem);
   width: 100%;
   max-width: 900px;
-  padding: 1.5rem;
+  padding: clamp(0.5rem, 2vw, 1.5rem);
   border-radius: 1rem;
   background: #7a4a2b;
   box-sizing: border-box;
@@ -126,11 +147,15 @@
 .pit-row {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 0.75rem;
+  gap: clamp(0.3rem, 1.2vw, 0.75rem);
 }
 
 .pit {
   aspect-ratio: 1 / 1;
+  /* Keep pits comfortably tappable even on the narrowest phones, while
+     still fitting 7 across without any page scrolling. */
+  min-width: 42px;
+  min-height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -141,15 +166,30 @@
   font: inherit;
   cursor: not-allowed;
   padding: 0;
+  /* Mobile touch tuning: instant taps, no callout/selection/zoom. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 80ms ease-out;
 }
 
 .pit[data-selectable='true'] {
   cursor: pointer;
-  box-shadow: 0 0 0 3px rgba(90, 52, 28, 0.35);
+  border-color: #2f9e44;
+  box-shadow:
+    0 0 0 3px rgba(47, 158, 68, 0.55),
+    0 0 10px rgba(47, 158, 68, 0.45);
 }
 
 .pit[data-selectable='true']:hover {
   filter: brightness(1.05);
+}
+
+/* Tap feedback: a quick, subtle press-down on any selectable pit. */
+.pit[data-selectable='true']:active {
+  transform: scale(0.92);
+  filter: brightness(0.97);
 }
 
 .pit:disabled {
@@ -193,7 +233,7 @@
 }
 
 .pit-seeds {
-  font-size: 1.25rem;
+  font-size: clamp(0.85rem, 3.5vw, 1.25rem);
   font-weight: 600;
   color: #3a2313;
 }
@@ -206,17 +246,12 @@
   background: #f0dcc0;
 }
 
-@media (max-width: 640px) {
-  .pit-row {
-    gap: 0.4rem;
-  }
-
-  .pit-seeds {
-    font-size: 0.9rem;
-  }
-
-  .board {
-    padding: 1rem;
-    gap: 1rem;
+@media (prefers-reduced-motion: reduce) {
+  .turn-indicator,
+  .pit--landing,
+  .pit--captured,
+  .pit {
+    animation: none !important;
+    transition: none !important;
   }
 }
